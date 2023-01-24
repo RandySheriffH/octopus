@@ -333,14 +333,14 @@ void TestTBB() {
 
 int main() {
 	std::cout << "hi, Mr Octopus!" << std::endl;
-	//TestQueue<64, 1000>();
+	TestQueue<64, 1000>();
 	octopus::StartThreadPool(2);
-	//BREAK;
-	//TestMainThread<10, 2000>();
-	//BREAK;
+	BREAK;
+	TestMainThread<10, 2000>();
+	BREAK;
 	TestSubThread<10000000>();
-	//BREAK;
-	//TestSubThreadEmdded<10000,100>();
+	BREAK;
+	TestSubThreadEmdded<10000,100>();
 	octopus::StopThreadPool();
 	//TestTBB<3, 10000000, 100>();
 }

@@ -165,10 +165,11 @@ namespace octopus {
 		}
 		void IncRef(size_t at) {
 			assert(at < __task_queues.size());
+			__refs[at]++;
 		}
 		void DecRef(size_t at) {
 			assert(at < __task_queues.size());
-
+			__refs[at]--;
 		}
 		bool exiting = false; // todo - hide this
 	private:
