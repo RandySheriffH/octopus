@@ -167,7 +167,7 @@ void TestMainThread() {
 		thread.join();
 	}
 	for (size_t i = 0; i < CAPACITY; ++i) {
-		assert(totals[i] == SCALE);
+		OCT_ENFORCE(totals[i] == SCALE, "");
 	}
 
 	std::cout << "TestMainThread done." << std::endl;
@@ -182,9 +182,13 @@ void TestSubThread() {
 
 	std::unique_ptr <std::thread::id[]> thread_ids = std::make_unique<std::thread::id[]>(SCALE);
 
+	constexpr float a = 12345;
+	constexpr float b = 54321;
+	constexpr float c = a * b;
+
 	for (size_t i = 0; i < SCALE; ++i) {
-		A[i] = 12345.;
-		B[i] = 54321.;
+		A[i] = a;
+		B[i] = b;
 	}
 
 	std::cout << "Main tid: " << std::this_thread::get_id() << std::endl;
@@ -211,7 +215,7 @@ void TestSubThread() {
 		std::cout << "thread " << pair.first << ": " << pair.second << std::endl;
 	}
 	for (size_t i = 0; i < SCALE; ++i) {
-		assert(C[i] == 12345. * 54321);
+		OCT_ENFORCE(std::abs(C[i] - c) < 1e-5, "");
 	}
 	std::cout << "In " << std::chrono::duration_cast<std::chrono::milliseconds>(tm_stop - tm_start).count() << " ms" << std::endl;
 	std::cout << "Cpu usage: " << cpu_usage_percentage * 100 << "%" << std::endl;
@@ -227,11 +231,13 @@ void TestSubThreadEmdded() {
 
 	std::unique_ptr<std::thread::id[]> thread_ids{ new std::thread::id[SCALE] };
 
-	//std::thread::id thread_ids[SCALE];
+	constexpr float a = 12345;
+	constexpr float b = 54321;
+	constexpr float c = a + b;
 
 	for (size_t i = 0; i < SCALE * SCALE2; ++i) {
-		A[i] = 1.;
-		B[i] = 2.;
+		A[i] = a;
+		B[i] = b;
 	}
 
 	std::cout << "Main tid: " << std::this_thread::get_id() << std::endl;
@@ -262,7 +268,7 @@ void TestSubThreadEmdded() {
 		std::cout << "thread " << pair.first << ": " << pair.second << std::endl;
 	}
 	for (size_t i = 0; i < SCALE * SCALE2; ++i) {
-		assert(C[i] == 3.f);
+		OCT_ENFORCE(std::abs(C[i]-c) < 1e-5, "");
 	}
 	std::cout << "In " << std::chrono::duration_cast<std::chrono::milliseconds>(tm_stop - tm_start).count() << " ms" << std::endl;
 	std::cout << "TestSubThreadEmdded done." << std::endl;
@@ -287,9 +293,13 @@ void TestTBB() {
 
 	std::unique_ptr <std::thread::id[]> thread_ids = std::make_unique<std::thread::id[]>(SCALE);
 
+	constexpr float a = 12345;
+	constexpr float b = 54321;
+	constexpr float c = a * b;
+
 	for (size_t i = 0; i < SCALE; ++i) {
-		A[i] = 12345.;
-		B[i] = 54321.;
+		A[i] = a;
+		B[i] = b;
 	}
 
 	std::cout << "Main tid: " << std::this_thread::get_id() << std::endl;
@@ -322,7 +332,7 @@ void TestTBB() {
 		std::cout << "thread " << pair.first << ": " << pair.second << std::endl;
 	}
 	for (size_t i = 0; i < SCALE; ++i) {
-		assert(C[i] == 12345. * 54321);
+		OCT_ENFORCE(std::abs(C[i] - c) < 1e-5, "");
 	}
 	std::cout << "In " << std::chrono::duration_cast<std::chrono::milliseconds>(tm_stop - tm_start).count() << " ms" << std::endl;
 	std::cout << "Cpu usage: " << cpu_usage_percentage * 100 << "%" << std::endl;

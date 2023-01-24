@@ -16,6 +16,10 @@
 #define OCT_ATOM_ACQ std::memory_order_acquire
 #define OCT_ATOM_RLX std::memory_order_relaxed
 #define OCT_ATOM_REL std::memory_order_release
+#define OCT_ENFORCE(cond,msg) \
+	if (!cond) { \
+		throw std::runtime_error(msg); \
+	}
 
 namespace octopus {
 
@@ -172,6 +176,7 @@ namespace octopus {
 			__refs[at]--;
 		}
 		bool exiting = false; // todo - hide this
+		void Reset();
 	private:
 		std::vector<TaskQueue> __task_queues;
 		alignas(OCT_CACHE_LINE_SIZE) std::vector<int> __refs;
@@ -227,7 +232,8 @@ namespace octopus {
 
 	TaskPool::~TaskPool() {
 		exiting = true;
-		for (size_t i = 1; i <= num_thread; ++i) {
+		auto num_ref = __refs.size();
+		for (size_t i = 1; i < num_ref; ++i) {
 			while (__refs[i]) {
 				_mm_pause();
 			}
@@ -235,9 +241,25 @@ namespace octopus {
 		task_pools.RemovePool(this);
 	}
 
+	void TaskPool::Reset() {
+		//exiting = true;
+		//auto num_ref = __refs.size();
+		//for (size_t i = 1; i <= num_ref; ++i) {
+		//	while (__refs[i]) {
+		//		_mm_pause();
+		//	}
+		//}
+		//__task_queues.resize(num_thread + 1);
+		//__refs.resize(num_thread + 1, 0);
+		//exiting = false;
+	}
+
 	TaskPool* GetTaskPool() {
 		if (GetThreadIndex() == 0) {
 			thread_local TaskPool main_thread_task_pool;
+			if (main_thread_task_pool.Size() != num_thread + 1) {
+				main_thread_task_pool.Reset();
+			}
 			return &main_thread_task_pool;
 		}
 		else {
@@ -355,6 +377,7 @@ namespace octopus {
 
 	void StartThreadPool(size_t num_thread) {
 		assert(octopus::num_thread == 0 && thread_data_vec.empty());
+		OCT_ENFORCE(GetThreadIndex() == 0, "StartThreadPool should only be called from main thread");
 		octopus::num_thread = num_thread;
 		thread_data_vec.resize(num_thread);
 		for (size_t index = 1; index <= num_thread; ++index) {
@@ -363,6 +386,7 @@ namespace octopus {
 	}
 
 	void StopThreadPool() {
+		OCT_ENFORCE(GetThreadIndex() == 0, "StopThreadPool should only be called from main thread");
 		std::for_each(thread_data_vec.begin(), thread_data_vec.end(),
 			[](ThreadData& thread_data) { thread_data.exit = true; });
 		std::for_each(threads.begin(), threads.end(),
