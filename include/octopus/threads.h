@@ -330,7 +330,8 @@ namespace octopus {
 
 		while (!thread_data.exit) {
 			done_task = false;
-			if (task_pool = GetTaskPool()) {
+			task_pool = GetTaskPool();
+			if (task_pool) {
 				do {
 					has_task = false;
 					for (size_t i = 0; i <= num_thread; ++i) {
