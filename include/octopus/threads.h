@@ -242,16 +242,18 @@ namespace octopus {
 	}
 
 	void TaskPool::Reset() {
-		//exiting = true;
-		//auto num_ref = __refs.size();
-		//for (size_t i = 1; i <= num_ref; ++i) {
-		//	while (__refs[i]) {
-		//		_mm_pause();
-		//	}
-		//}
-		//__task_queues.resize(num_thread + 1);
-		//__refs.resize(num_thread + 1, 0);
-		//exiting = false;
+		exiting = true;
+		auto num_ref = __refs.size();
+		for (size_t i = 1; i < num_ref; ++i) {
+			while (__refs[i]) {
+				_mm_pause();
+			}
+		}
+		__task_queues.clear();
+		__task_queues.resize(num_thread + 1);
+		__refs.clear();
+		__refs.resize(num_thread + 1, 0);
+		exiting = false;
 	}
 
 	TaskPool* GetTaskPool() {
