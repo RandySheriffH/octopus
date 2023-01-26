@@ -1,4 +1,4 @@
-#include "octopus/threads.h"
+#include "octopus/threadpool.h"
 #include <oneapi/tbb.h>
 #include <iostream>
 #include <vector>
@@ -139,15 +139,17 @@ void TestQueue() {
 	std::cout << "TestQueue done." << std::endl;
 }
 
-template<size_t CAPACITY, size_t SCALE>
+template<size_t THREAD, size_t CAPACITY, size_t SCALE>
 void TestMainThread() {
+
+	octopus::ThreadPool tp(THREAD);
 
 	std::atomic<size_t> total = 0;
 	std::thread thread = std::thread([&]() {
 		octopus::Fn fn = [&](std::ptrdiff_t begin, std::ptrdiff_t end) {
 			total.fetch_add(end - begin);
 		};
-	octopus::ParallFor(&fn, SCALE);
+		tp.ParallFor(&fn, SCALE);
 		});
 	thread.join();
 	assert(total == SCALE);
@@ -156,25 +158,27 @@ void TestMainThread() {
 	std::vector<std::thread> threads;
 	for (size_t i = 0; i < CAPACITY; ++i) {
 		totals[i] = 0;
-		threads.emplace_back(std::thread([i, &totals]() {
-			octopus::Fn fn = [i, &totals](std::ptrdiff_t begin, std::ptrdiff_t end) {
+		threads.emplace_back(std::thread([&, i]() {
+			octopus::Fn fn = [&, i](std::ptrdiff_t begin, std::ptrdiff_t end) {
 				totals[i].fetch_add(end - begin);
 			};
-		octopus::ParallFor(&fn, SCALE);
+		tp.ParallFor(&fn, SCALE);
 			}));
 	}
 	for (auto& thread : threads) {
 		thread.join();
 	}
 	for (size_t i = 0; i < CAPACITY; ++i) {
-		OCT_ENFORCE(totals[i] == SCALE, "");
+		OCT_ENFORCE(totals[i].load() == SCALE, "");
 	}
 
 	std::cout << "TestMainThread done." << std::endl;
 }
 
-template<size_t SCALE>
+template<size_t THREAD, size_t SCALE>
 void TestSubThread() {
+
+	octopus::ThreadPool tp(THREAD);
 
 	std::unique_ptr<float[]> A = std::make_unique<float[]>(SCALE);
 	std::unique_ptr<float[]> B = std::make_unique<float[]>(SCALE);
@@ -201,9 +205,11 @@ void TestSubThread() {
 		}
 	};
 
+	octopus::StaticPartitioner partitioner(1000);
+
 	CPUUsage cpu_usage;
 	auto tm_start = std::chrono::steady_clock::now();
-	octopus::ParallFor(&fn, SCALE);
+	tp.ParallFor(&fn, SCALE, &partitioner);
 	auto tm_stop = std::chrono::steady_clock::now();
 	auto cpu_usage_percentage = cpu_usage.GetUsage();
 
@@ -222,8 +228,10 @@ void TestSubThread() {
 	std::cout << "TestSubThread done." << std::endl;
 }
 
-template<size_t SCALE, size_t SCALE2>
+template<size_t THREAD, size_t SCALE, size_t SCALE2>
 void TestSubThreadEmdded() {
+
+	octopus::ThreadPool tp(THREAD);
 
 	std::unique_ptr<float[]> A{ new float[SCALE * SCALE2] };
 	std::unique_ptr<float[]> B{ new float[SCALE * SCALE2] };
@@ -253,11 +261,11 @@ void TestSubThreadEmdded() {
 		for (auto i = begin; i < end; ++i) {
 			thread_ids[i] = tid;
 		}
-		octopus::ParallFor(&fn2, begin * SCALE2, end * SCALE2);
+		tp.ParallFor(&fn2, begin * SCALE2, end * SCALE2);
 	};
 
 	auto tm_start = std::chrono::steady_clock::now();
-	octopus::ParallFor(&fn, SCALE);
+	tp.ParallFor(&fn, SCALE);
 	auto tm_stop = std::chrono::steady_clock::now();
 
 	std::unordered_map<std::thread::id, size_t> counter;
@@ -344,13 +352,12 @@ void TestTBB() {
 int main() {
 	std::cout << "hi, Mr Octopus!" << std::endl;
 	TestQueue<64, 1000>();
-	octopus::StartThreadPool(2);
 	BREAK;
-	TestMainThread<10, 2000>();
+	TestMainThread<4, 10, 2000>();
 	BREAK;
-	TestSubThread<10000000>();
+	TestSubThread<4, 10000000>();
 	BREAK;
-	TestSubThreadEmdded<10000,100>();
-	octopus::StopThreadPool();
-	//TestTBB<3, 10000000, 100>();
+	TestSubThreadEmdded<4, 10000, 100>();
+	BREAK;
+	TestTBB<4, 10000000, 100>();
 }
