@@ -123,6 +123,11 @@ namespace octopus {
 				locked = false;
 				_mm_pause();
 			}
+			while (!node->__locked.compare_exchange_weak(
+				locked, true, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+				locked = false;
+				_mm_pause();
+			}
 			while (!node->__next->__locked.compare_exchange_weak(
 				locked, true, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
 				locked = false;
@@ -136,15 +141,15 @@ namespace octopus {
 			next->__locked.store(false, OCT_ATOM_RLX);
 			delete node;
 		}
-		T Head() const {
+		T Head() {
 			bool locked = false;
-			while (!__head.__next->__locked.compare_exchange_weak(
+			while (!__head.__locked.compare_exchange_weak(
 				locked, true, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
 				locked = false;
 				_mm_pause();
 			}
 			T t = __head.__next->__t;
-			__head.__next->__locked.store(false, OCT_ATOM_RLX);
+			__head.__locked.store(false, OCT_ATOM_RLX);
 			return t;
 		}
 	private:
