@@ -111,6 +111,8 @@ namespace octopus {
 			next->__prev = node;
 			__head.__locked.store(false, OCT_ATOM_RLX);
 			next->__locked.store(false, OCT_ATOM_RLX);
+			// __num_task.fetch_add(1, OCT_ATOM_RLX);
+			NotifyAll();
 			return node;
 		}
 		void Remove(Node* node) {
@@ -139,6 +141,7 @@ namespace octopus {
 			next->__prev = prev;
 			prev->__locked.store(false, OCT_ATOM_RLX);
 			next->__locked.store(false, OCT_ATOM_RLX);
+			// __num_task.fetch_sub(1, OCT_ATOM_RLX);
 			delete node;
 		}
 		T Head() {
@@ -152,9 +155,20 @@ namespace octopus {
 			__head.__locked.store(false, OCT_ATOM_RLX);
 			return t;
 		}
+		void NotifyAll() {
+			std::unique_lock<std::mutex> lock(__mtx);
+			__cv.notify_all();
+		}
+		void WaitForTask() {
+			std::unique_lock<std::mutex> lock(__mtx);
+			__cv.wait(lock);
+		}
 	private:
 		Node __head{ T{} };
 		Node __tail{ T{} };
+		//std::atomic_int __num_task;
+		std::condition_variable __cv;
+		std::mutex __mtx;
 	};
 
 	struct Partitioner {
@@ -248,6 +262,7 @@ namespace octopus {
 		~ThreadPool() {
 			std::for_each(__thread_datas.begin(), __thread_datas.end(),
 				[](ThreadData& thread_data) { thread_data.exit = true; });
+			__task_pools.NotifyAll();
 			std::for_each(__threads.begin(), __threads.end(),
 				[](std::thread& t) { t.join(); });
 			__thread_datas.clear();
@@ -270,6 +285,7 @@ namespace octopus {
 			else {
 				*GetThreadPool() = this;
 				auto* node = __task_pools.Prepend(std::move(*GetTaskPool()));
+
 				// if it's main thread
 				alignas(OCT_CACHE_LINE_SIZE) std::atomic<std::ptrdiff_t> counter{ begin };
 				Fn wrapper_fn = [&counter, fn](std::ptrdiff_t b, std::ptrdiff_t e) {
@@ -277,6 +293,7 @@ namespace octopus {
 					counter.fetch_add(e - b, OCT_ATOM_RLX);
 				};
 
+				//__task_pools.NotifyAll();
 				Task task(&wrapper_fn, partitioner, begin, end);
 				task.Run();
 
@@ -353,26 +370,33 @@ namespace octopus {
 			thread_data.tid = std::this_thread::get_id();
 
 			while (!thread_data.exit) {
-				done_task = false;
-				task_pool = __task_pools.Head();
-				if (task_pool) {
-					*GetTaskPool() = task_pool;
-					do {
-						has_task = false;
-						for (size_t i = 0; i < __num_thread; ++i) {
-							auto task = task_pool->PopAt(i);
-							if (task) {
-								task.Run();
-								while (task = task_pool->PopAt(index)) {
+				for (size_t i = 0; i < 2; ++i) {
+					done_task = false;
+					task_pool = __task_pools.Head();
+					if (task_pool) {
+						*GetTaskPool() = task_pool;
+						do {
+							has_task = false;
+							for (size_t i = 0; i < __num_thread; ++i) {
+								auto task = task_pool->PopAt(i);
+								if (task) {
 									task.Run();
+									while (task = task_pool->PopAt(index)) {
+										task.Run();
+									}
+									done_task = has_task = true;
 								}
-								done_task = has_task = true;
 							}
+						} while (has_task);
+					}
+					if (!done_task) {
+						if (i) {
+							__task_pools.WaitForTask();
 						}
-					} while (has_task);
-				}
-				if (!done_task) {
-					std::this_thread::yield(); // release cpu when idel
+						else {
+							std::this_thread::yield(); // release cpu when idel
+						}
+					}
 				}
 			}
 		}
