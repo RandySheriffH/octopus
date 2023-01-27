@@ -368,9 +368,11 @@ namespace octopus {
 			TaskPool* task_pool = {};
 			ThreadData& thread_data = __thread_datas[index - 1];
 			thread_data.tid = std::this_thread::get_id();
+			constexpr size_t num_spin = 4;
 
 			while (!thread_data.exit) {
-				for (size_t i = 0; i < 2; ++i) {
+				size_t counter_idel = 0;
+				for (size_t i = 0; i < num_spin; ++i) {
 					done_task = false;
 					task_pool = __task_pools.Head();
 					if (task_pool) {
@@ -390,12 +392,18 @@ namespace octopus {
 						} while (has_task);
 					}
 					if (!done_task) {
-						if (i) {
-							__task_pools.WaitForTask();
-						}
-						else {
-							std::this_thread::yield(); // release cpu when idel
-						}
+						//if (i + 1 == num_spin) {
+						//	__task_pools.WaitForTask();
+						//}
+						//else {
+						//	//std::this_thread::yield();
+						//	_mm_pause();
+						//}
+						++counter_idel;
+						_mm_pause();
+					}
+					if (counter_idel == num_spin) {
+						__task_pools.WaitForTask();
 					}
 				}
 			}
