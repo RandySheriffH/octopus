@@ -190,6 +190,37 @@ namespace octopus {
 
 	StaticPartitioner default_partitioner(1);
 
+	class AffinityPartitioner : public Partitioner {
+	public:
+		AffinityPartitioner(std::ptrdiff_t num_chunk, std::ptrdiff_t min_chunk_size) :
+			__num_chuck(num_chunk), __min_chuck_size(min_chunk_size) {
+			assert(__num_chuck > 0);
+			assert(__min_chuck_size > 0);
+		}
+		std::ptrdiff_t Partition(std::ptrdiff_t begin, std::ptrdiff_t end) const override {
+			auto total = end - begin;
+			if (total <= __min_chuck_size) {
+				return end;
+			}
+			else {
+				auto avg_chuck_size = total / __num_chuck;
+				if (avg_chuck_size * __num_chuck < total) {
+					++avg_chuck_size;
+				}
+				auto mid = end - avg_chuck_size;
+				if (mid - begin < __min_chuck_size) {
+					return end;
+				}
+				else {
+					return mid;
+				}
+			}
+		}
+	private:
+		const std::ptrdiff_t __num_chuck;
+		const std::ptrdiff_t __min_chuck_size;
+	};
+
 	class alignas(OCT_CACHE_LINE_SIZE) Task {
 	public:
 		Task() = default;
