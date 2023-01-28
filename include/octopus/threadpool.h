@@ -22,59 +22,104 @@
 
 namespace octopus {
 
-	using Iter = std::atomic_int64_t;
+	using Iter = std::atomic_int32_t;
 	using Fn = std::function<void(std::ptrdiff_t, std::ptrdiff_t)>;
 
 	template<typename T, size_t CAPACITY>
 	class alignas(OCT_CACHE_LINE_SIZE) Queue {
 	public:
-		Queue() = default;
-		Queue(const Queue& q) {
-			__head.store(q.__head.load());
-			__tail.store(q.__tail.load());
-			memcpy(__slots, q.__slots, sizeof(T*) * CAPACITY);
+		struct alignas(OCT_CACHE_LINE_SIZE) Slot {
+			Slot() = default;
+			Slot& operator=(const Slot& slot) {
+				if (this != &slot) {
+					t = slot.t;
+					state.store(slot.state.load(OCT_ATOM_RLX), OCT_ATOM_RLX);
+				}
+				return *this;
+			}
+			T t = {};
+			//0: empty, 1: loading, 2: unloading, 3: ready
+			alignas(OCT_CACHE_LINE_SIZE) std::atomic_short state = 0;
 		};
-		T Pop() {
+		Queue() = default;
+		Queue(const Queue& queue) {
+			__head.store(queue.__head.load());
+			__tail.store(queue.__tail.load());
+			for (size_t i = 0; i < CAPACITY; ++i) {
+				__slots[i] = queue.__slots[i];
+			}
+		};
+		T PopHead() {
 			while (true) {
 				auto head = __head.load(OCT_ATOM_RLX);
-				auto tail = __tail.load(OCT_ATOM_RLX);
-				if (head >= 0 && tail >= 0) {
-					if (head == tail) {
-						return {}; // empty
-					}
-					if (__head.compare_exchange_weak(head, - head - 1, OCT_ATOM_ACQ, OCT_ATOM_RLX)) {
-						T t = __slots[head];
-						__slots[head] = {};
+				if (head >= 0 &&
+					__head.compare_exchange_weak(head, -head - 1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+					short state = ready;
+					if (__slots[head].state.compare_exchange_weak(state, unloading, OCT_ATOM_ACQ, OCT_ATOM_RLX)) {
+						T t = std::move(__slots[head].t);
+						__slots[head].t = {};
+						__slots[head].state.store(empty, OCT_ATOM_REL);
 						auto next_head = (head + 1) % CAPACITY;
 						__head.store(next_head, OCT_ATOM_RLX);
-						return std::move(t);
+						return t;
+					}
+					else {
+						__head.store(head, OCT_ATOM_RLX);
+						return {};
 					}
 				}
 			}
-			return {};
 		}
-		bool Push(T&& t) {
+		T PopTail() {
 			while (true) {
-				auto head = __head.load(OCT_ATOM_RLX);
 				auto tail = __tail.load(OCT_ATOM_RLX);
-				if (head >= 0 && tail >= 0) {
-					auto next_tail = (tail + 1) % CAPACITY;
-					if (next_tail == head) {
-						return false; // full
+				if (tail >= 0 &&
+					__tail.compare_exchange_weak(tail, -tail - 1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+					auto prev_tail = (tail - 1 + CAPACITY) % CAPACITY;
+					short state = ready;
+					if (__slots[prev_tail].state.compare_exchange_weak(state, unloading, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+						T t = std::move(__slots[prev_tail].t);
+						__slots[prev_tail].t = {};
+						__slots[prev_tail].state.store(empty, OCT_ATOM_RLX);
+						__tail.store(prev_tail, OCT_ATOM_REL);
+						return t;
 					}
-					if (__tail.compare_exchange_weak(tail, - tail - 1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
-						__slots[tail] = std::forward<T>(t);
-						__tail.store(next_tail, OCT_ATOM_REL);
+					else {
+						// tail is not ready
+						__tail.store(tail, OCT_ATOM_RLX);
+						return {};
+					}
+				}
+			}
+		}
+		bool PushTail(T&& t) {
+			while (true) {
+				auto tail = __tail.load(OCT_ATOM_RLX);
+				if (tail >= 0 &&
+					__tail.compare_exchange_weak(tail, -tail - 1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+					short state = empty;
+					if (__slots[tail].state.compare_exchange_weak(state, loading, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+						__slots[tail].t = std::move(t);
+						__slots[tail].state.store(ready, OCT_ATOM_REL);
+						auto next_tail = (tail + 1) % CAPACITY;
+						__tail.store(next_tail, OCT_ATOM_RLX);
 						return true;
 					}
+					else {
+						__tail.store(tail, OCT_ATOM_REL);
+						return false;
+					}
 				}
 			}
-			return false;
 		}
 	private:
-		Iter __head = {};
-		Iter __tail = {};
-		T __slots[CAPACITY] = {};
+		alignas(OCT_CACHE_LINE_SIZE) Iter __head{};
+		alignas(OCT_CACHE_LINE_SIZE) Iter __tail{};
+		Slot __slots[CAPACITY];
+		const short empty = 0;
+		const short loading = 1;
+		const short unloading = 2;
+		const short ready = 3;
 	};
 
 	template<typename T, size_t CAPACITY>
@@ -111,7 +156,6 @@ namespace octopus {
 			next->__prev = node;
 			__head.__locked.store(false, OCT_ATOM_RLX);
 			next->__locked.store(false, OCT_ATOM_RLX);
-			// __num_task.fetch_add(1, OCT_ATOM_RLX);
 			NotifyAll();
 			return node;
 		}
@@ -141,7 +185,6 @@ namespace octopus {
 			next->__prev = prev;
 			prev->__locked.store(false, OCT_ATOM_RLX);
 			next->__locked.store(false, OCT_ATOM_RLX);
-			// __num_task.fetch_sub(1, OCT_ATOM_RLX);
 			delete node;
 		}
 		T Head() {
@@ -166,7 +209,6 @@ namespace octopus {
 	private:
 		Node __head{ T{} };
 		Node __tail{ T{} };
-		//std::atomic_int __num_task;
 		std::condition_variable __cv;
 		std::mutex __mtx;
 	};
@@ -177,7 +219,7 @@ namespace octopus {
 
 	class StaticPartitioner : public Partitioner {
 	public:
-		StaticPartitioner(std::ptrdiff_t chuck_size):
+		StaticPartitioner(std::ptrdiff_t chuck_size) :
 			__chuck_size(chuck_size) {
 			assert(__chuck_size);
 		}
@@ -253,13 +295,17 @@ namespace octopus {
 	public:
 		TaskPool(size_t num_thread);
 		~TaskPool() = default;
-		Task PopAt(size_t at) {
+		Task PopHeadAt(size_t at) {
 			assert(at < __task_queues.size());
-			return __task_queues[at].Pop();
+			return __task_queues[at].PopHead();
 		}
-		bool PushAt(Task&& t, size_t at) {
+		Task PopTailAt(size_t at) {
 			assert(at < __task_queues.size());
-			return __task_queues[at].Push(std::forward<Task>(t));
+			return __task_queues[at].PopTail();
+		}
+		bool PushTailAt(Task&& t, size_t at) {
+			assert(at < __task_queues.size());
+			return __task_queues[at].PushTail(std::forward<Task>(t));
 		}
 		size_t Size() const {
 			return __task_queues.size();
@@ -284,7 +330,7 @@ namespace octopus {
 
 		//num_thread include main thread, so only "num_thread - 1" threads will be created
 		ThreadPool(size_t num_thread) : __num_thread(num_thread) {
-			__thread_datas.resize(__num_thread-1);
+			__thread_datas.resize(__num_thread - 1);
 			for (size_t index = 1; index < __num_thread; ++index) {
 				__threads.emplace_back(&ThreadPool::ThreadEntry, this, index);
 			}
@@ -329,7 +375,7 @@ namespace octopus {
 				task.Run();
 
 				TaskPool* task_pool = *GetTaskPool();
-				while (task = task_pool->PopAt(0)) {
+				while (task = task_pool->PopTailAt(0)) {
 					task.Run();
 				}
 
@@ -339,10 +385,10 @@ namespace octopus {
 				while (counter.load(OCT_ATOM_RLX) < end) {
 					done_task = false;
 					for (size_t i = 1; i < __num_thread; ++i) {
-						task = task_pool->PopAt(i);
+						task = task_pool->PopHeadAt(i);
 						if (task) {
 							task.Run();
-							while (task = task_pool->PopAt(0)) {
+							while (task = task_pool->PopTailAt(0)) {
 								task.Run();
 							}
 							done_task = true;
@@ -353,6 +399,7 @@ namespace octopus {
 					}
 				}
 
+				assert(counter.load(OCT_ATOM_RLX) == end);
 				__task_pools.Remove(node);
 			}
 		}
@@ -411,10 +458,10 @@ namespace octopus {
 						do {
 							has_task = false;
 							for (size_t i = 0; i < __num_thread; ++i) {
-								auto task = task_pool->PopAt(i);
+								auto task = task_pool->PopHeadAt(i);
 								if (task) {
 									task.Run();
-									while (task = task_pool->PopAt(index)) {
+									while (task = task_pool->PopTailAt(index)) {
 										task.Run();
 									}
 									done_task = has_task = true;
@@ -423,13 +470,6 @@ namespace octopus {
 						} while (has_task);
 					}
 					if (!done_task) {
-						//if (i + 1 == num_spin) {
-						//	__task_pools.WaitForTask();
-						//}
-						//else {
-						//	//std::this_thread::yield();
-						//	_mm_pause();
-						//}
 						++counter_idel;
 						_mm_pause();
 					}
@@ -443,7 +483,7 @@ namespace octopus {
 		const size_t __num_thread; // including main thread
 		std::vector<ThreadData> __thread_datas;
 		std::vector<std::thread> __threads;
-		LinkedList<TaskPool*,32> __task_pools;
+		LinkedList<TaskPool*, 32> __task_pools;
 	};
 
 	TaskPool::TaskPool(size_t num_thread) : __num_thread(num_thread) {
@@ -457,7 +497,7 @@ namespace octopus {
 			std::ptrdiff_t end = __end;
 			while ((end = __partitioner->Partition(__begin, __end)) < __end) {
 				Task sub_task(__fn, __partitioner, end, __end);
-				if (!(*task_pool)->PushAt(std::move(sub_task), thread_index)) {
+				if (!(*task_pool)->PushTailAt(std::move(sub_task), thread_index)) {
 					break;
 				}
 				__end = end;

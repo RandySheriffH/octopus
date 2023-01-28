@@ -85,7 +85,7 @@ void TestQueue() {
 					auto jj = j - 1;
 					if (topdown_iter.compare_exchange_weak(j, jj)) {
 						Tick tick = { j };
-						if (!tick_queue.Push(std::move(tick))) {
+						if (!tick_queue.PushTail(std::move(tick))) {
 							assert(bit_thread_map[tick.tick] == main_thread_pid);
 							bit_thread_map[tick.tick] = std::this_thread::get_id();
 						}
@@ -101,7 +101,7 @@ void TestQueue() {
 				if (j < SCALE) {
 					auto jj = j + 1;
 					if (bottomup_iter.compare_exchange_weak(j, jj)) {
-						Tick tick = tick_queue.Pop();
+						Tick tick = tick_queue.PopHead();
 						if (tick.tick < SCALE) {
 							assert(bit_thread_map[tick.tick] == main_thread_pid);
 							bit_thread_map[tick.tick] = std::this_thread::get_id();
