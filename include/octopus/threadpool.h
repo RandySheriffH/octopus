@@ -458,13 +458,13 @@ namespace octopus {
 							}
 						} while (has_task);
 					}
-					/*if (!done_task) {
+					if (!done_task) {
 						++counter_idel;
-						_mm_pause();
+						std::this_thread::yield();
 					}
-					if (counter_idel == num_spin) {
-						WaitForTask();
-					}*/
+				}
+				if (counter_idel == num_spin) {
+					WaitForTask();
 				}
 			}
 		}
