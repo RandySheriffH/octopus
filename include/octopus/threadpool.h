@@ -156,7 +156,6 @@ namespace octopus {
 			next->__prev = node;
 			__head.__locked.store(false, OCT_ATOM_RLX);
 			next->__locked.store(false, OCT_ATOM_RLX);
-			NotifyAll();
 			return node;
 		}
 		void Remove(Node* node) {
@@ -198,19 +197,9 @@ namespace octopus {
 			__head.__locked.store(false, OCT_ATOM_RLX);
 			return t;
 		}
-		void NotifyAll() {
-			std::unique_lock<std::mutex> lock(__mtx);
-			__cv.notify_all();
-		}
-		void WaitForTask() {
-			std::unique_lock<std::mutex> lock(__mtx);
-			__cv.wait(lock);
-		}
 	private:
 		Node __head{ T{} };
 		Node __tail{ T{} };
-		std::condition_variable __cv;
-		std::mutex __mtx;
 	};
 
 	struct Partitioner {
@@ -339,7 +328,7 @@ namespace octopus {
 		~ThreadPool() {
 			std::for_each(__thread_datas.begin(), __thread_datas.end(),
 				[](ThreadData& thread_data) { thread_data.exit = true; });
-			__task_pools.NotifyAll();
+			NotifyAll();
 			std::for_each(__threads.begin(), __threads.end(),
 				[](std::thread& t) { t.join(); });
 			__thread_datas.clear();
@@ -474,16 +463,28 @@ namespace octopus {
 						_mm_pause();
 					}
 					if (counter_idel == num_spin) {
-						__task_pools.WaitForTask();
+						WaitForTask();
 					}
 				}
 			}
+		}
+
+		void NotifyAll() {
+			std::unique_lock<std::mutex> lock(__mtx);
+			__cv.notify_all();
+		}
+
+		void WaitForTask() {
+			std::unique_lock<std::mutex> lock(__mtx);
+			__cv.wait(lock);
 		}
 
 		const size_t __num_thread; // including main thread
 		std::vector<ThreadData> __thread_datas;
 		std::vector<std::thread> __threads;
 		LinkedList<TaskPool*, 32> __task_pools;
+		std::condition_variable __cv;
+		std::mutex __mtx;
 	};
 
 	TaskPool::TaskPool(size_t num_thread) : __num_thread(num_thread) {
@@ -492,19 +493,23 @@ namespace octopus {
 
 	void Task::Run() {
 		TaskPool** task_pool = ThreadPool::GetTaskPool();
+		auto end = __end;
 		if (__fn && __partitioner && *task_pool) {
 			auto thread_index = ThreadPool::GetThreadIndex();
-			std::ptrdiff_t end = __end;
-			while ((end = __partitioner->Partition(__begin, __end)) < __end) {
-				Task sub_task(__fn, __partitioner, end, __end);
+			std::ptrdiff_t mid = __end;
+			while ((mid = __partitioner->Partition(__begin, __end)) < __end) {
+				Task sub_task(__fn, __partitioner, mid, __end);
 				if (!(*task_pool)->PushTailAt(std::move(sub_task), thread_index)) {
 					break;
 				}
-				__end = end;
+				__end = mid;
 			}
 		}
 		if (__fn) {
 			assert(__begin <= __end);
+			if (__end < end) {
+				(*ThreadPool::GetThreadPool())->NotifyAll();
+			}
 			(*__fn)(__begin, __end);
 		}
 	}
