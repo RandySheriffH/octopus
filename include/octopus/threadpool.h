@@ -49,8 +49,8 @@ namespace octopus {
 				__slots[i] = queue.__slots[i];
 			}
 		};
-		T PopHead() {
-			while (true) {
+		T PopHead(bool poll = true) {
+			do {
 				auto head = __head.load(OCT_ATOM_RLX);
 				if (head >= 0 &&
 					__head.compare_exchange_weak(head, -head - 1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
@@ -68,10 +68,11 @@ namespace octopus {
 						return {};
 					}
 				}
-			}
+			} while (poll);
+			return {};
 		}
-		T PopTail() {
-			while (true) {
+		T PopTail(bool poll = true) {
+			do {
 				auto tail = __tail.load(OCT_ATOM_RLX);
 				if (tail >= 0 &&
 					__tail.compare_exchange_weak(tail, -tail - 1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
@@ -90,7 +91,8 @@ namespace octopus {
 						return {};
 					}
 				}
-			}
+			} while (poll);
+			return {};
 		}
 		bool PushTail(T&& t) {
 			while (true) {
@@ -284,13 +286,13 @@ namespace octopus {
 	public:
 		TaskPool(size_t num_thread);
 		~TaskPool() = default;
-		Task PopHeadAt(size_t at) {
+		Task PopHeadAt(size_t at, bool poll) {
 			assert(at < __task_queues.size());
-			return __task_queues[at].PopHead();
+			return __task_queues[at].PopHead(poll);
 		}
-		Task PopTailAt(size_t at) {
+		Task PopTailAt(size_t at, bool poll) {
 			assert(at < __task_queues.size());
-			return __task_queues[at].PopTail();
+			return __task_queues[at].PopTail(poll);
 		}
 		bool PushTailAt(Task&& t, size_t at) {
 			assert(at < __task_queues.size());
@@ -364,7 +366,7 @@ namespace octopus {
 				task.Run();
 
 				TaskPool* task_pool = *GetTaskPool();
-				while (task = task_pool->PopTailAt(0)) {
+				while (task = task_pool->PopTailAt(0, true)) {
 					task.Run();
 				}
 
@@ -374,10 +376,10 @@ namespace octopus {
 				while (counter.load(OCT_ATOM_RLX) < end) {
 					done_task = false;
 					for (size_t i = 1; i < __num_thread; ++i) {
-						task = task_pool->PopHeadAt(i);
+						task = task_pool->PopHeadAt(i,false);
 						if (task) {
 							task.Run();
-							while (task = task_pool->PopTailAt(0)) {
+							while (task = task_pool->PopTailAt(0,true)) {
 								task.Run();
 							}
 							done_task = true;
@@ -447,10 +449,10 @@ namespace octopus {
 						do {
 							has_task = false;
 							for (size_t i = 0; i < __num_thread; ++i) {
-								auto task = task_pool->PopHeadAt(i);
+								auto task = task_pool->PopHeadAt(i, false);
 								if (task) {
 									task.Run();
-									while (task = task_pool->PopTailAt(index)) {
+									while (task = task_pool->PopTailAt(index, true)) {
 										task.Run();
 									}
 									done_task = has_task = true;
