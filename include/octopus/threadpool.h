@@ -138,8 +138,7 @@ namespace octopus {
 			__head.__next = &__tail;
 			__tail.__prev = &__head;
 		}
-		Node* Prepend(T&& t) {
-			Node* node = new Node(std::move(t));
+		void Prepend(Node* node) {
 			bool locked = false;
 			while (!__head.__locked.compare_exchange_weak(
 				locked, true, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
@@ -158,7 +157,6 @@ namespace octopus {
 			next->__prev = node;
 			__head.__locked.store(false, OCT_ATOM_RLX);
 			next->__locked.store(false, OCT_ATOM_RLX);
-			return node;
 		}
 		void Remove(Node* node) {
 			assert(node);
@@ -186,7 +184,6 @@ namespace octopus {
 			next->__prev = prev;
 			prev->__locked.store(false, OCT_ATOM_RLX);
 			next->__locked.store(false, OCT_ATOM_RLX);
-			delete node;
 		}
 		T Head() {
 			bool locked = false;
@@ -284,7 +281,7 @@ namespace octopus {
 	// each main thread owns a task pool
 	class alignas(OCT_CACHE_LINE_SIZE) TaskPool {
 	public:
-		TaskPool(size_t num_thread);
+		TaskPool(size_t num_queue);
 		~TaskPool() = default;
 		Task PopHeadAt(size_t at, bool poll) {
 			assert(at < __task_queues.size());
@@ -304,7 +301,6 @@ namespace octopus {
 		bool exiting = false; // todo - hide this
 		void Reset();
 	private:
-		const size_t __num_thread;
 		std::vector<TaskQueue> __task_queues;
 	};
 
@@ -352,7 +348,8 @@ namespace octopus {
 			}
 			else {
 				*GetThreadPool() = this;
-				auto* node = __task_pools.Prepend(std::move(*GetTaskPool()));
+				LinkedList<TaskPool*, 32>::Node node(std::move(*GetTaskPool()));
+				__task_pools.Prepend(&node);
 
 				// if it's main thread
 				alignas(OCT_CACHE_LINE_SIZE) std::atomic<std::ptrdiff_t> counter{ begin };
@@ -391,7 +388,7 @@ namespace octopus {
 				}
 
 				assert(counter.load(OCT_ATOM_RLX) == end);
-				__task_pools.Remove(node);
+				__task_pools.Remove(&node);
 			}
 		}
 
@@ -489,8 +486,8 @@ namespace octopus {
 		std::mutex __mtx;
 	};
 
-	TaskPool::TaskPool(size_t num_thread) : __num_thread(num_thread) {
-		__task_queues.resize(num_thread);
+	TaskPool::TaskPool(size_t num_queue) {
+		__task_queues.resize(num_queue);
 	}
 
 	void Task::Run() {
