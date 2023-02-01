@@ -373,10 +373,10 @@ namespace octopus {
 				while (counter.load(OCT_ATOM_RLX) < end) {
 					done_task = false;
 					for (size_t i = 1; i < __num_thread; ++i) {
-						task = task_pool->PopHeadAt(i,false);
+						task = task_pool->PopHeadAt(i, false);
 						if (task) {
 							task.Run();
-							while (task = task_pool->PopTailAt(0,true)) {
+							while (task = task_pool->PopTailAt(0, true)) {
 								task.Run();
 							}
 							done_task = true;
@@ -469,7 +469,6 @@ namespace octopus {
 		}
 
 		void NotifyAll() {
-			std::unique_lock<std::mutex> lock(__mtx);
 			__cv.notify_all();
 		}
 
