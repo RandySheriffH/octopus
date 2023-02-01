@@ -214,13 +214,18 @@ void TestSubThread() {
 	auto tm_stop = std::chrono::steady_clock::now();
 	auto cpu_usage_percentage = cpu_usage.GetUsage();
 
+	size_t breaks = 0;
 	std::unordered_map<std::thread::id, size_t> counter;
 	for (size_t i = 0; i < SCALE; ++i) {
 		counter[thread_ids[i]]++;
+		if (i + 1 < SCALE && thread_ids[i] != thread_ids[i + 1]) {
+			++breaks;
+		}
 	}
 	for (const auto& pair : counter) {
 		std::cout << "thread " << pair.first << ": " << pair.second << std::endl;
 	}
+	std::cout << "breaks: " << breaks << std::endl;
 	for (size_t i = 0; i < SCALE; ++i) {
 		OCT_ENFORCE(std::abs(C[i] - c) < 1e-5, "");
 	}
@@ -333,13 +338,18 @@ void TestTBB() {
 	auto tm_stop = std::chrono::steady_clock::now();
 	auto cpu_usage_percentage = cpu_usage.GetUsage();
 
+	size_t breaks = 0;
 	std::unordered_map<std::thread::id, size_t> counter;
 	for (size_t i = 0; i < SCALE; ++i) {
 		counter[thread_ids[i]]++;
+		if (i + 1 < SCALE && thread_ids[i] != thread_ids[i + 1]) {
+			++breaks;
+		}
 	}
 	for (const auto& pair : counter) {
 		std::cout << "thread " << pair.first << ": " << pair.second << std::endl;
 	}
+	std::cout << "breaks: " << breaks << std::endl;
 	for (size_t i = 0; i < SCALE; ++i) {
 		OCT_ENFORCE(std::abs(C[i] - c) < 1e-5, "");
 	}
