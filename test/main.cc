@@ -175,7 +175,7 @@ void TestMainThread() {
 	std::cout << "TestMainThread done." << std::endl;
 }
 
-template<size_t THREAD, size_t SCALE>
+template<size_t THREAD, size_t SCALE, std::ptrdiff_t REPEAT>
 void TestSubThread() {
 
 	octopus::ThreadPool tp(THREAD);
@@ -186,13 +186,14 @@ void TestSubThread() {
 
 	std::unique_ptr <std::thread::id[]> thread_ids = std::make_unique<std::thread::id[]>(SCALE);
 
-	constexpr float a = 12345;
-	constexpr float b = 54321;
-	constexpr float c = a * b;
+	constexpr float a = 12;
+	constexpr float b = 53;
+	constexpr float c = a * b * REPEAT;
 
 	for (size_t i = 0; i < SCALE; ++i) {
 		A[i] = a;
 		B[i] = b;
+		C[i] = 0;
 	}
 
 	std::cout << "Main tid: " << std::this_thread::get_id() << std::endl;
@@ -200,13 +201,16 @@ void TestSubThread() {
 	octopus::Fn fn = [&](std::ptrdiff_t begin, std::ptrdiff_t end) {
 		auto tid = std::this_thread::get_id();
 		for (auto i = begin; i < end; ++i) {
-			C[i] = A[i] * B[i];
+			for (auto j = 0; j < REPEAT; ++j) {
+				C[i] += A[i] * B[i];
+			}
 			thread_ids[i] = tid;
 		}
 	};
 
+	octopus::AffinityPartitioner partitioner(THREAD, std::max(SCALE / (10 * THREAD), 1ULL));
 	//octopus::StaticPartitioner partitioner(std::max(static_cast<std::ptrdiff_t>(SCALE)/(10*THREAD), 1ULL));
-	octopus::AffinityPartitioner partitioner(2, SCALE/(THREAD*10));
+	//octopus::AffinityPartitioner partitioner(2, SCALE/(THREAD*10));
 
 	CPUUsage cpu_usage;
 	auto tm_start = std::chrono::steady_clock::now();
@@ -298,7 +302,7 @@ struct TbbTask {
 	const octopus::Fn& fn_;
 };
 
-template<size_t CAPATICY, size_t SCALE, std::ptrdiff_t GRAIN>
+template<size_t CAPATICY, size_t SCALE, std::ptrdiff_t REPEAT>
 void TestTBB() {
 
 	std::unique_ptr<float[]> A = std::make_unique<float[]>(SCALE);
@@ -307,13 +311,14 @@ void TestTBB() {
 
 	std::unique_ptr <std::thread::id[]> thread_ids = std::make_unique<std::thread::id[]>(SCALE);
 
-	constexpr float a = 12345;
-	constexpr float b = 54321;
-	constexpr float c = a * b;
+	constexpr float a = 12;
+	constexpr float b = 53;
+	constexpr float c = a * b * REPEAT;
 
 	for (size_t i = 0; i < SCALE; ++i) {
 		A[i] = a;
 		B[i] = b;
+		C[i] = 0;
 	}
 
 	std::cout << "Main tid: " << std::this_thread::get_id() << std::endl;
@@ -321,7 +326,9 @@ void TestTBB() {
 	octopus::Fn fn = [&](std::ptrdiff_t begin, std::ptrdiff_t end) {
 		auto tid = std::this_thread::get_id();
 		for (auto i = begin; i < end; ++i) {
-			C[i] = A[i] * B[i];
+			for (auto j = 0; j < REPEAT; ++j) {
+				C[i] += A[i] * B[i];
+			}
 			thread_ids[i] = tid;
 		}
 	};
@@ -362,13 +369,13 @@ void TestTBB() {
 
 int main() {
 	std::cout << "hi, Mr Octopus!" << std::endl;
-	TestQueue<64, 1000>();
+	//TestQueue<64, 1000>();
+	//BREAK;
+	//TestMainThread<4, 10, 2000>();
+	//BREAK;
+	TestSubThread<8, 10000000, 100>();
 	BREAK;
-	TestMainThread<4, 10, 2000>();
-	BREAK;
-	TestSubThread<4, 10000000>();
-	BREAK;
-	TestSubThreadEmdded<4, 10000, 100>();
-	BREAK;
-	TestTBB<4, 10000000, 100>();
+	//TestSubThreadEmdded<4, 10000, 100>();
+	//BREAK;
+	TestTBB<8, 10000000, 100>();
 }
