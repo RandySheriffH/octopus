@@ -435,7 +435,7 @@ namespace octopus {
 			ThreadData& thread_data = __thread_datas[index - 1];
 			thread_data.tid = std::this_thread::get_id();
 			//const size_t num_spin = 2 * __num_thread;
-			const size_t num_spin = 8;
+			const size_t num_spin = 2;
 
 			while (!thread_data.exit) {
 				size_t counter_idel = 0;
