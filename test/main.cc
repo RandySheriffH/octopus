@@ -218,9 +218,9 @@ void TestSubThread() {
 		}
 	};
 
-	octopus::AffinityPartitioner partitioner(THREAD, std::max(SCALE / (10 * THREAD), 1UL));
+	//octopus::AffinityPartitioner partitioner(THREAD, std::max(SCALE / (10 * THREAD), 1UL));
 	//octopus::StaticPartitioner partitioner(std::max(static_cast<std::ptrdiff_t>(SCALE)/(10*THREAD), 1ULL));
-	//octopus::AffinityPartitioner partitioner(2, SCALE/(THREAD*10));
+	octopus::AffinityPartitioner partitioner(2, SCALE/(THREAD*200));
 
 	CPUUsage cpu_usage;
 	auto tm_start = std::chrono::steady_clock::now();

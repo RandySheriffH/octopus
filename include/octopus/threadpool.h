@@ -11,7 +11,7 @@
 
 #include <xmmintrin.h>
 
-#define OCT_CACHE_LINE_SIZE 64
+#define OCT_CACHE_LINE_SIZE 64 
 #define OCT_PADNN(n1,n2) const int64_t n1##n2
 #define OCT_PADN(n1,n2) OCT_PADNN(n1,n2)
 #define OCT_PAD OCT_PADN(__pad,__COUNTER__)
@@ -439,6 +439,7 @@ namespace octopus {
 			ThreadData& thread_data = __thread_datas[index - 1];
 			thread_data.tid = std::this_thread::get_id();
 			const size_t num_spin = (index&1) ? 2 : 1;
+			//const size_t num_spin = 4;
 
 			while (!thread_data.exit) {
 				size_t counter_idel = 0;
