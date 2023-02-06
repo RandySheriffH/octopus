@@ -4,9 +4,12 @@
 #include <functional>
 #include <algorithm>
 #include <cassert>
+#include <thread>
 #include <vector>
 #include <atomic>
 #include <mutex>
+
+#include <xmmintrin.h>
 
 #define OCT_CACHE_LINE_SIZE 64
 #define OCT_PADNN(n1,n2) const int64_t n1##n2
@@ -19,6 +22,7 @@
 	if (!cond) { \
 		throw std::runtime_error(msg); \
 	}
+
 
 namespace octopus {
 
@@ -39,7 +43,7 @@ namespace octopus {
 			}
 			T t = {};
 			//0: empty, 1: loading, 2: unloading, 3: ready
-			alignas(OCT_CACHE_LINE_SIZE) std::atomic_short state = 0;
+			alignas(OCT_CACHE_LINE_SIZE) std::atomic_short state{0};
 		};
 		Queue() = default;
 		Queue(const Queue& queue) {

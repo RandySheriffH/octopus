@@ -6,9 +6,12 @@
 #include <bitset>
 #include <cassert>
 #include <map>
+#ifdef _WIN32
 #include <windows.h>
+#endif
 #undef max
 
+#ifdef _WIN32
 std::uint64_t SubtractFILETIME(const FILETIME& ft_a, const FILETIME& ft_b) {
 	LARGE_INTEGER a, b;
 	a.LowPart = ft_a.dwLowDateTime;
@@ -52,6 +55,13 @@ private:
 	FILETIME proc_kernel_ft_;
 	FILETIME proc_user_ft_;
 };
+#else
+class CPUUsage {
+public:
+	double GetUsage() const { return 1; }
+	void Reset() {}
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -208,7 +218,7 @@ void TestSubThread() {
 		}
 	};
 
-	octopus::AffinityPartitioner partitioner(THREAD, std::max(SCALE / (10 * THREAD), 1ULL));
+	octopus::AffinityPartitioner partitioner(THREAD, std::max(SCALE / (10 * THREAD), 1UL));
 	//octopus::StaticPartitioner partitioner(std::max(static_cast<std::ptrdiff_t>(SCALE)/(10*THREAD), 1ULL));
 	//octopus::AffinityPartitioner partitioner(2, SCALE/(THREAD*10));
 
