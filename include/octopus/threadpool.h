@@ -457,6 +457,7 @@ namespace octopus {
 									while (task = task_pool->PopTailAt(index, true)) {
 										task.Run();
 									}
+
 									done_task = has_task = true;
 								}
 							}
@@ -464,7 +465,9 @@ namespace octopus {
 					}
 					if (!done_task) {
 						++counter_idel;
-						std::this_thread::yield();
+						if (i + 1 < num_spin) {
+							std::this_thread::yield();
+						}
 					}
 				}
 				if (counter_idel == num_spin) {
