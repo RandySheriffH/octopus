@@ -26,5 +26,12 @@ endif()
 
 target_include_directories(test_oct PRIVATE include ${TBB_INC})
 target_link_directories(test_oct PRIVATE ${TBB_BIN} ${TBB_BIN_DEBUG})
+
+if(WIN32)
 target_link_libraries(test_oct PRIVATE ${TBB} ${TBB_DEUBG})
+else()
+find_package(Threads REQUIRED)
+target_link_libraries(test_oct PRIVATE ${TBB} ${TBB_DEUBG} Threads::Threads)
+endif()
+
 add_dependencies(test_oct intel_tbb)
