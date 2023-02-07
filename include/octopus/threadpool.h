@@ -440,7 +440,7 @@ namespace octopus {
 			thread_data.tid = std::this_thread::get_id();
 			//const size_t num_spin = (index&1) ? 2 : 1;
 			const size_t num_spin = 6;
-
+			/*
 			while (!thread_data.exit) {
 				size_t counter_idel = 0;
 				for (size_t i = 0; i < num_spin; ++i) {
@@ -468,6 +468,33 @@ namespace octopus {
 					}
 				}
 				if (counter_idel == num_spin) {
+					WaitForTask();
+				}
+			}*/
+
+			while (!thread_data.exit) {
+				task_pool = __task_pools.Head();
+				if (task_pool) {
+					*GetTaskPool() = task_pool;
+					done_task = false;
+					do {
+						has_task = false;
+						for (size_t i = 0; i < __num_thread; ++i) {
+							auto task = task_pool->PopHeadAt(i, false);
+							if (task) {
+								task.Run();
+								while (task = task_pool->PopTailAt(index, true)) {
+									task.Run();
+								}
+								done_task = has_task = true;
+							}
+						}
+					} while (has_task);
+					if (!done_task) {
+						std::this_thread::yield();
+					}
+				}
+				else {
 					WaitForTask();
 				}
 			}
