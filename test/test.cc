@@ -26,7 +26,7 @@ public:
 		Reset();
 	}
 
-	double GetUsage() const {
+	short GetUsage() const {
 		FILETIME sys_idle_ft, sys_kernel_ft, sys_user_ft, proc_creation_ft, proc_exit_ft, proc_kernel_ft, proc_user_ft;
 		GetSystemTimes(&sys_idle_ft, &sys_kernel_ft, &sys_user_ft);
 		GetProcessTimes(GetCurrentProcess(), &proc_creation_ft, &proc_exit_ft, &proc_kernel_ft, &proc_user_ft);
@@ -36,7 +36,7 @@ public:
 		std::uint64_t proc_user_diff = SubtractFILETIME(proc_user_ft, proc_user_ft_);
 		std::uint64_t total_sys = sys_kernel_ft_diff + sys_user_ft_diff;
 		std::uint64_t total_proc = proc_kernel_diff + proc_user_diff;
-		return total_sys > 0 ? static_cast<double>(total_proc) / total_sys : 0;
+		return total_sys > 0 ? static_cast<double>(total_proc) / total_sys * 100.0 : 0;
 	}
 
 	void Reset() {
