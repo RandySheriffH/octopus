@@ -439,7 +439,7 @@ namespace octopus {
 			ThreadData& thread_data = __thread_datas[index - 1];
 			thread_data.tid = std::this_thread::get_id();
 			//const size_t num_spin = (index&1) ? 2 : 1;
-			const size_t num_spin = 4;
+			const size_t num_spin = 6;
 
 			while (!thread_data.exit) {
 				size_t counter_idel = 0;
