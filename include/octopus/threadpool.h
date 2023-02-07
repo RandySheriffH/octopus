@@ -491,7 +491,8 @@ namespace octopus {
 						}
 					} while (has_task);
 					if (!done_task) {
-						std::this_thread::yield();
+						//std::this_thread::yield();
+						//_mm_pause();
 					}
 				}
 				else {
