@@ -61,13 +61,13 @@ private:
 #include <sys/times.h>
 #include <sys/resource.h>
 
-class CPUUsage : public ICPUUsage {
+class CPUUsage {
  public:
   CPUUsage() {
     Reset();
   }
 
-  short GetUsage() const override {
+  short GetUsage() const {
     struct tms time_sample;
     clock_t total_clock_now = times(&time_sample);
     if (total_clock_now <= total_clock_start_ ||
@@ -78,11 +78,11 @@ class CPUUsage : public ICPUUsage {
     } else {
       clock_t proc_total_clock_diff = (time_sample.tms_stime - proc_sys_clock_start_) + (time_sample.tms_utime - proc_user_clock_start_);
       clock_t total_clock_diff = total_clock_now - total_clock_start_;
-      return static_cast<short>(100.0 * proc_total_clock_diff / total_clock_diff / onnxruntime::Env::Default().GetNumPhysicalCpuCores());
+      return static_cast<short>(100.0 * proc_total_clock_diff / total_clock_diff / std::thread::hardware_concurrency());
     }
   }
 
-  void Reset() override {
+  void Reset() {
     struct tms time_sample;
     total_clock_start_ = times(&time_sample);
     proc_sys_clock_start_ = time_sample.tms_stime;
@@ -252,7 +252,7 @@ void TestSubThread() {
 		}
 	};
 
-	octopus::AffinityPartitioner partitioner(THREAD, std::max(SCALE / (10 * THREAD), 1ULL));
+	octopus::AffinityPartitioner partitioner(THREAD, std::max(SCALE / (10 * THREAD), (size_t)1));
 	//octopus::StaticPartitioner partitioner(std::max(static_cast<std::ptrdiff_t>(SCALE)/(10*THREAD), 1ULL));
 	//octopus::AffinityPartitioner partitioner(2, SCALE/(THREAD*10));
 
