@@ -4,9 +4,11 @@
 #include <functional>
 #include <algorithm>
 #include <cassert>
+#include <numeric>
 #include <thread>
 #include <vector>
 #include <atomic>
+#include <random>
 #include <mutex>
 
 #ifndef _WIN32
@@ -440,7 +442,14 @@ namespace octopus {
 			ThreadData& thread_data = __thread_datas[index - 1];
 			thread_data.tid = std::this_thread::get_id();
 
-			const size_t num_spin = (index&1) ? 2 : 1;
+			std::vector<size_t> slots(__num_thread,0);
+			std::iota(slots.begin(), slots.end(), 0);
+			unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+			std::default_random_engine rng(seed);
+			std::shuffle(slots.begin(), slots.end(), rng);
+
+			//const size_t num_spin = (index&1) ? 2 : 1;
+			const size_t num_spin = 2;
 			while (!thread_data.exit) {
 				size_t counter_idel = 0;
 				for (size_t i = 0; i < num_spin; ++i) {
@@ -451,7 +460,7 @@ namespace octopus {
 						do {
 							has_task = false;
 							for (size_t i = 0; i < __num_thread; ++i) {
-								auto task = task_pool->PopHeadAt(i, false);
+								auto task = task_pool->PopHeadAt(slots[i], false);
 								if (task) {
 									task.Run();
 									while (task = task_pool->PopTailAt(index, true)) {
