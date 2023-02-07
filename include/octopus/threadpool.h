@@ -449,7 +449,7 @@ namespace octopus {
 			std::shuffle(slots.begin(), slots.end(), rng);
 
 			//const size_t num_spin = (index&1) ? 2 : 1;
-			const size_t num_spin = 2;
+			const size_t num_spin = 4;
 			while (!thread_data.exit) {
 				size_t counter_idel = 0;
 				for (size_t i = 0; i < num_spin; ++i) {
