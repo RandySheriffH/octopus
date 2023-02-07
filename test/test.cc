@@ -57,9 +57,9 @@ private:
 
 #else
 
-#include <cstddef>
-#include <sys/times.h>
-#include <sys/resource.h>
+#include <fstream>
+#include <numeric>
+#include <unistd.h>
 
 class CPUUsage {
  public:
@@ -67,32 +67,42 @@ class CPUUsage {
     Reset();
   }
 
-  short GetUsage() const {
-    struct tms time_sample;
-    clock_t total_clock_now = times(&time_sample);
-    if (total_clock_now <= total_clock_start_ ||
-        time_sample.tms_stime < proc_sys_clock_start_ ||
-        time_sample.tms_utime < proc_user_clock_start_) {
-      // overflow detection
-      return -1;
-    } else {
-      clock_t proc_total_clock_diff = (time_sample.tms_stime - proc_sys_clock_start_) + (time_sample.tms_utime - proc_user_clock_start_);
-      clock_t total_clock_diff = total_clock_now - total_clock_start_;
-      return static_cast<short>(100.0 * proc_total_clock_diff / total_clock_diff / std::thread::hardware_concurrency());
-    }
+  short GetUsage() {
+    size_t idle_time{}, total_time{};
+    get_cpu_times(idle_time, total_time);
+    const float idle_time_delta = idle_time - previous_idle_time_;
+    const float total_time_delta = total_time - previous_total_time_;
+    const float utilization = 100.0 * (1.0 - idle_time_delta / total_time_delta);
+    previous_idle_time_ = idle_time;
+    previous_total_time_ = total_time;
+    return (short)utilization;
   }
 
   void Reset() {
-    struct tms time_sample;
-    total_clock_start_ = times(&time_sample);
-    proc_sys_clock_start_ = time_sample.tms_stime;
-    proc_user_clock_start_ = time_sample.tms_utime;
+    GetUsage();
+  }
+ 
+  static std::vector<size_t> get_cpu_times() {
+    std::ifstream proc_stat("/proc/stat");
+    proc_stat.ignore(5, ' '); // Skip the 'cpu' prefix.
+    std::vector<size_t> times;
+    for (size_t time; proc_stat >> time; times.push_back(time));
+    return times;
+  }
+
+  bool get_cpu_times(size_t &idle_time, size_t &total_time) {
+    const std::vector<size_t> cpu_times = get_cpu_times();
+    if (cpu_times.size() < 4)
+      return false;
+    idle_time = cpu_times[3];
+    total_time = std::accumulate(cpu_times.begin(), cpu_times.end(), 0);
+    return true;
   }
 
  private:
-  clock_t total_clock_start_;
-  clock_t proc_sys_clock_start_;
-  clock_t proc_user_clock_start_;
+
+  size_t previous_idle_time_{};
+  size_t previous_total_time_{};
 };
 
 #endif
@@ -278,7 +288,7 @@ void TestSubThread() {
 		OCT_ENFORCE(std::abs(C[i] - c) < 1e-5, "");
 	}
 	std::cout << "In " << std::chrono::duration_cast<std::chrono::milliseconds>(tm_stop - tm_start).count() << " ms" << std::endl;
-	std::cout << "Cpu usage: " << cpu_usage_percentage * 100 << "%" << std::endl;
+	std::cout << "Cpu usage: " << cpu_usage_percentage << "%" << std::endl;
 	std::cout << "TestSubThread done." << std::endl;
 }
 
@@ -405,7 +415,7 @@ void TestTBB() {
 		OCT_ENFORCE(std::abs(C[i] - c) < 1e-5, "");
 	}
 	std::cout << "In " << std::chrono::duration_cast<std::chrono::milliseconds>(tm_stop - tm_start).count() << " ms" << std::endl;
-	std::cout << "Cpu usage: " << cpu_usage_percentage * 100 << "%" << std::endl;
+	std::cout << "Cpu usage: " << cpu_usage_percentage << "%" << std::endl;
 	std::cout << "TestTBB done." << std::endl;
 }
 
