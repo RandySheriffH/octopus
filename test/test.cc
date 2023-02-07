@@ -62,47 +62,47 @@ private:
 #include <unistd.h>
 
 class CPUUsage {
- public:
-  CPUUsage() {
-    Reset();
-  }
+public:
+	CPUUsage() {
+		Reset();
+	}
 
-  short GetUsage() {
-    size_t idle_time{}, total_time{};
-    get_cpu_times(idle_time, total_time);
-    const float idle_time_delta = idle_time - previous_idle_time_;
-    const float total_time_delta = total_time - previous_total_time_;
-    const float utilization = 100.0 * (1.0 - idle_time_delta / total_time_delta);
-    previous_idle_time_ = idle_time;
-    previous_total_time_ = total_time;
-    return (short)utilization;
-  }
+	short GetUsage() {
+		size_t idle_time{}, total_time{};
+		get_cpu_times(idle_time, total_time);
+		const float idle_time_delta = idle_time - previous_idle_time_;
+		const float total_time_delta = total_time - previous_total_time_;
+		const float utilization = 100.0 * (1.0 - idle_time_delta / total_time_delta);
+		previous_idle_time_ = idle_time;
+		previous_total_time_ = total_time;
+		return (short)utilization;
+	}
 
-  void Reset() {
-    GetUsage();
-  }
- 
-  static std::vector<size_t> get_cpu_times() {
-    std::ifstream proc_stat("/proc/stat");
-    proc_stat.ignore(5, ' '); // Skip the 'cpu' prefix.
-    std::vector<size_t> times;
-    for (size_t time; proc_stat >> time; times.push_back(time));
-    return times;
-  }
+	void Reset() {
+		GetUsage();
+	}
 
-  bool get_cpu_times(size_t &idle_time, size_t &total_time) {
-    const std::vector<size_t> cpu_times = get_cpu_times();
-    if (cpu_times.size() < 4)
-      return false;
-    idle_time = cpu_times[3];
-    total_time = std::accumulate(cpu_times.begin(), cpu_times.end(), 0);
-    return true;
-  }
+	static std::vector<size_t> get_cpu_times() {
+		std::ifstream proc_stat("/proc/stat");
+		proc_stat.ignore(5, ' '); // Skip the 'cpu' prefix.
+		std::vector<size_t> times;
+		for (size_t time; proc_stat >> time; times.push_back(time));
+		return times;
+	}
 
- private:
+	bool get_cpu_times(size_t& idle_time, size_t& total_time) {
+		const std::vector<size_t> cpu_times = get_cpu_times();
+		if (cpu_times.size() < 4)
+			return false;
+		idle_time = cpu_times[3];
+		total_time = std::accumulate(cpu_times.begin(), cpu_times.end(), 0);
+		return true;
+	}
 
-  size_t previous_idle_time_{};
-  size_t previous_total_time_{};
+private:
+
+	size_t previous_idle_time_{};
+	size_t previous_total_time_{};
 };
 
 #endif
@@ -150,24 +150,24 @@ void TestQueue() {
 				}
 				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			}
-			while (true) {
-				auto j = bottomup_iter.load();
-				if (j < SCALE) {
-					auto jj = j + 1;
-					if (bottomup_iter.compare_exchange_weak(j, jj)) {
-						Tick tick = tick_queue.PopHead();
-						if (tick.tick < SCALE) {
-							assert(bit_thread_map[tick.tick] == main_thread_pid);
-							bit_thread_map[tick.tick] = std::this_thread::get_id();
-						}
+		while (true) {
+			auto j = bottomup_iter.load();
+			if (j < SCALE) {
+				auto jj = j + 1;
+				if (bottomup_iter.compare_exchange_weak(j, jj)) {
+					Tick tick = tick_queue.PopHead();
+					if (tick.tick < SCALE) {
+						assert(bit_thread_map[tick.tick] == main_thread_pid);
+						bit_thread_map[tick.tick] = std::this_thread::get_id();
 					}
 				}
-				else {
-					break;
-				}
-				std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			}
-		}));
+			else {
+				break;
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		}
+			}));
 	}
 	for (auto& thread : threads) {
 		thread.join();
@@ -203,7 +203,7 @@ void TestMainThread() {
 		octopus::Fn fn = [&](std::ptrdiff_t begin, std::ptrdiff_t end) {
 			total.fetch_add(end - begin);
 		};
-		tp.ParallFor(&fn, SCALE);
+	tp.ParallFor(&fn, SCALE);
 		});
 	thread.join();
 	assert(total == SCALE);
@@ -340,7 +340,7 @@ void TestSubThreadEmdded() {
 		std::cout << "thread " << pair.first << ": " << pair.second << std::endl;
 	}
 	for (size_t i = 0; i < SCALE * SCALE2; ++i) {
-		OCT_ENFORCE(std::abs(C[i]-c) < 1e-5, "");
+		OCT_ENFORCE(std::abs(C[i] - c) < 1e-5, "");
 	}
 	std::cout << "In " << std::chrono::duration_cast<std::chrono::milliseconds>(tm_stop - tm_start).count() << " ms" << std::endl;
 	std::cout << "TestSubThreadEmdded done." << std::endl;
