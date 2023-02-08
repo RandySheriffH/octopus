@@ -314,6 +314,8 @@ namespace octopus {
 		std::thread::id tid = {};
 	};
 
+	using ThreadInitFn = std::function<void(size_t,void*)>;
+
 	class ThreadPool {
 	public:
 		friend TaskPool::TaskPool(size_t num_thread);
@@ -321,7 +323,8 @@ namespace octopus {
 		friend void Task::Run();
 
 		//num_thread include main thread, so only "num_thread - 1" threads will be created
-		ThreadPool(size_t num_thread) : __num_thread(num_thread) {
+		ThreadPool(size_t num_thread, ThreadInitFn init_fn = [](size_t,void*) {}, void* init_param = {}) :
+			__num_thread(num_thread), __init_fn(init_fn), __init_param(init_param) {
 			__thread_datas.resize(__num_thread - 1);
 			for (size_t index = 1; index < __num_thread; ++index) {
 				__threads.emplace_back(&ThreadPool::ThreadEntry, this, index);
@@ -431,48 +434,55 @@ namespace octopus {
 			assert(index > 0);
 			assert(index - 1 < __thread_datas.size());
 
-			GetThreadIndex() = index;
-			*GetThreadPool() = this;
+			try {
 
-			bool done_task = {};
-			bool has_task = {};
-			TaskPool* task_pool = {};
-			ThreadData& thread_data = __thread_datas[index - 1];
-			thread_data.tid = std::this_thread::get_id();
+				GetThreadIndex() = index;
+				*GetThreadPool() = this;
 
-			static const size_t idle_limit = 8;
-			size_t idle_counter = 0;
-			while (!thread_data.exit) {
-				done_task = false;
-				task_pool = __task_pools.Head();
-				if (task_pool) {
-					*GetTaskPool() = task_pool;
-					do {
-						has_task = false;
-						for (size_t i = 0; i < __num_thread; ++i) {
-							auto task = task_pool->PopHeadAt(i, false);
-							if (task) {
-								task.Run();
-								while (task = task_pool->PopTailAt(index, true)) {
+				bool done_task = {};
+				bool has_task = {};
+				TaskPool* task_pool = {};
+				ThreadData& thread_data = __thread_datas[index - 1];
+				thread_data.tid = std::this_thread::get_id();
+
+				__init_fn(index - 1, __init_param);
+
+				static const size_t idle_limit = 8;
+				size_t idle_counter = 0;
+				while (!thread_data.exit) {
+					done_task = false;
+					task_pool = __task_pools.Head();
+					if (task_pool) {
+						*GetTaskPool() = task_pool;
+						do {
+							has_task = false;
+							for (size_t i = 0; i < __num_thread; ++i) {
+								auto task = task_pool->PopHeadAt(i, false);
+								if (task) {
 									task.Run();
+									while (task = task_pool->PopTailAt(index, true)) {
+										task.Run();
+									}
+									done_task = has_task = true;
 								}
-								done_task = has_task = true;
 							}
-						}
-					} while (has_task);
-				}
-				if (done_task) {
-					idle_counter = 0;
-				}
-				else {
-					idle_counter++;
-					if (idle_counter == idle_limit) {
-						WaitForTask();
+						} while (has_task);
+					}
+					if (done_task) {
+						idle_counter = 0;
 					}
 					else {
-						std::this_thread::yield();
+						idle_counter++;
+						if (idle_counter == idle_limit) {
+							WaitForTask();
+						}
+						else {
+							std::this_thread::yield();
+						}
 					}
 				}
+			}
+			catch (...) {
 			}
 		}
 
@@ -491,6 +501,8 @@ namespace octopus {
 		LinkedList<TaskPool*, 32> __task_pools;
 		std::condition_variable __cv;
 		std::mutex __mtx;
+		ThreadInitFn __init_fn;
+		void* __init_param;
 	};
 
 	TaskPool::TaskPool(size_t num_queue) {
