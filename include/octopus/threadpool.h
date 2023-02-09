@@ -135,7 +135,7 @@ namespace octopus {
 		struct alignas(OCT_CACHE_LINE_SIZE) Node {
 			Node(T&& t) : __t(t) {}
 			T __t{};
-			std::atomic_bool __locked{ false };
+			std::atomic_int __rw_lock{0};
 			Node* __prev{};
 			Node* __next{};
 		};
@@ -144,15 +144,15 @@ namespace octopus {
 			__tail.__prev = &__head;
 		}
 		void Prepend(Node* node) {
-			bool locked = false;
-			while (!__head.__locked.compare_exchange_weak(
-				locked, true, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
-				locked = false;
+			int rw_lock = 0;
+			while (!__head.__rw_lock.compare_exchange_weak(
+				rw_lock, -1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+				rw_lock = 0;
 				_mm_pause();
 			}
-			while (!__head.__next->__locked.compare_exchange_weak(
-				locked, true, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
-				locked = false;
+			while (!__head.__next->__rw_lock.compare_exchange_weak(
+				rw_lock, -1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+				rw_lock = 0;
 				_mm_pause();
 			}
 			Node* next = __head.__next;
@@ -160,45 +160,44 @@ namespace octopus {
 			node->__next = next;
 			node->__prev = &__head;
 			next->__prev = node;
-			__head.__locked.store(false, OCT_ATOM_RLX);
-			next->__locked.store(false, OCT_ATOM_RLX);
+			__head.__rw_lock.store(0, OCT_ATOM_RLX);
+			next->__rw_lock.store(0, OCT_ATOM_RLX);
 		}
 		void Remove(Node* node) {
 			assert(node);
 			assert(node != &__head);
 			assert(node != &__tail);
-			bool locked = false;
-			while (!node->__prev->__locked.compare_exchange_weak(
-				locked, true, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
-				locked = false;
+			int rw_lock = 0;
+			while (!node->__prev->__rw_lock.compare_exchange_weak(
+				rw_lock, -1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+				rw_lock = 0;
 				_mm_pause();
 			}
-			while (!node->__locked.compare_exchange_weak(
-				locked, true, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
-				locked = false;
+			while (!node->__rw_lock.compare_exchange_weak(
+				rw_lock, -1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+				rw_lock = 0;
 				_mm_pause();
 			}
-			while (!node->__next->__locked.compare_exchange_weak(
-				locked, true, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
-				locked = false;
+			while (!node->__next->__rw_lock.compare_exchange_weak(
+				rw_lock, -1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
+				rw_lock = 0;
 				_mm_pause();
 			}
 			Node* prev = node->__prev;
 			Node* next = node->__next;
 			prev->__next = next;
 			next->__prev = prev;
-			prev->__locked.store(false, OCT_ATOM_RLX);
-			next->__locked.store(false, OCT_ATOM_RLX);
+			prev->__rw_lock.store(0, OCT_ATOM_RLX);
+			next->__rw_lock.store(0, OCT_ATOM_RLX);
 		}
 		T Head() {
-			bool locked = false;
-			while (!__head.__locked.compare_exchange_weak(
-				locked, true, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
-				locked = false;
+			int rw_lock = 0;
+			while ((rw_lock = __head.__rw_lock.load(OCT_ATOM_RLX)) < 0 ||
+				!__head.__rw_lock.compare_exchange_weak(rw_lock, rw_lock+1, OCT_ATOM_RLX, OCT_ATOM_RLX)) {
 				_mm_pause();
 			}
 			T t = __head.__next->__t;
-			__head.__locked.store(false, OCT_ATOM_RLX);
+			__head.__rw_lock.fetch_sub(1, OCT_ATOM_RLX);
 			return t;
 		}
 	private:
@@ -375,23 +374,22 @@ namespace octopus {
 					task.Run();
 				}
 
-				bool done_task = false;
+				bool done_task = counter.load(OCT_ATOM_RLX) == end;
 				assert(task_pool);
 
-				while (counter.load(OCT_ATOM_RLX) < end) {
-					done_task = false;
+				while (!done_task) {
 					for (size_t i = 1; i < __num_thread; ++i) {
+						done_task = counter.load(OCT_ATOM_RLX) == end;
+						if (done_task) {
+							break;
+						}
 						task = task_pool->PopHeadAt(i, false);
 						if (task) {
 							task.Run();
 							while (task = task_pool->PopTailAt(0, true)) {
 								task.Run();
 							}
-							done_task = true;
 						}
-					}
-					if (!done_task) {
-						_mm_pause();
 					}
 				}
 
@@ -447,7 +445,7 @@ namespace octopus {
 
 				__init_fn(index - 1, __init_param);
 
-				static const size_t idle_limit = 8;
+				static const size_t idle_limit = 4;
 				size_t idle_counter = 0;
 				while (!thread_data.exit) {
 					done_task = false;
