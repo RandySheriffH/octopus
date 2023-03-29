@@ -457,7 +457,6 @@ namespace octopus {
 									while (task = task_pool->PopTailAt(index, true)) {
 										task.Run();
 									}
-
 									done_task = has_task = true;
 								}
 							}
@@ -471,7 +470,7 @@ namespace octopus {
 					}
 				}
 				if (counter_idel == num_spin && !thread_data.exit) {
-					//WaitForTask();
+					WaitForTask();
 				}
 			}
 		}
