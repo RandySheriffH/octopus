@@ -471,7 +471,7 @@ namespace octopus {
 					}
 				}
 				if (counter_idel == num_spin && !thread_data.exit) {
-					WaitForTask();
+					//WaitForTask();
 				}
 			}
 		}
