@@ -44,7 +44,7 @@ namespace octopus {
 			}
 			T t = {};
 			//0: empty, 1: loading, 2: unloading, 3: ready
-			alignas(OCT_CACHE_LINE_SIZE) std::atomic_short state{0};
+			alignas(OCT_CACHE_LINE_SIZE) std::atomic_short state{ 0 };
 		};
 		Queue() = default;
 		Queue(const Queue& queue) {
@@ -121,7 +121,7 @@ namespace octopus {
 		}
 	private:
 		alignas(OCT_CACHE_LINE_SIZE) Iter __head{};
-		alignas(OCT_CACHE_LINE_SIZE) Iter __tail{};
+		alignas(OCT_CACHE_LINE_SIZE) Iter __tail {};
 		Slot __slots[CAPACITY];
 		const short empty = 0;
 		const short loading = 1;
@@ -331,8 +331,9 @@ namespace octopus {
 		~ThreadPool() {
 			std::for_each(__thread_datas.begin(), __thread_datas.end(),
 				[](ThreadData& thread_data) { thread_data.exit = true; });
+			NotifyAll();
 			std::for_each(__threads.begin(), __threads.end(),
-				[this](std::thread& t) { NotifyAll(); t.join(); });
+				[this](std::thread& t) { t.join(); });
 			__thread_datas.clear();
 		}
 
@@ -439,7 +440,7 @@ namespace octopus {
 			ThreadData& thread_data = __thread_datas[index - 1];
 			thread_data.tid = std::this_thread::get_id();
 
-			const size_t num_spin = (index&1) ? 2 : 1;
+			const size_t num_spin = (index & 1) ? 2 : 1;
 			while (!thread_data.exit) {
 				size_t counter_idel = 0;
 				for (size_t i = 0; i < num_spin; ++i) {
@@ -480,7 +481,7 @@ namespace octopus {
 
 		void WaitForTask() {
 			std::unique_lock<std::mutex> lock(__mtx);
-			__cv.wait(lock);
+			__cv.wait_for(lock, std::chrono::milliseconds{300});
 		}
 
 		const size_t __num_thread; // including main thread
