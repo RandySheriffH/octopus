@@ -331,9 +331,8 @@ namespace octopus {
 		~ThreadPool() {
 			std::for_each(__thread_datas.begin(), __thread_datas.end(),
 				[](ThreadData& thread_data) { thread_data.exit = true; });
-			NotifyAll();
 			std::for_each(__threads.begin(), __threads.end(),
-				[](std::thread& t) { t.join(); });
+				[this](std::thread& t) { NotifyAll(); t.join(); });
 			__thread_datas.clear();
 		}
 
@@ -469,7 +468,7 @@ namespace octopus {
 						}
 					}
 				}
-				if (counter_idel == num_spin && !thread_data.exit) {
+				if (counter_idel == num_spin) {
 					WaitForTask();
 				}
 			}
