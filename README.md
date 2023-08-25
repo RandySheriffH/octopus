@@ -11,3 +11,7 @@ A few things to be explored for a single numa node:
    between groups a leader thread will be assigned the privilege of stealing, and further between sockets another
    leader thread will do the job...
 3. Which set of tests should be selected for benchmarking? qsort, merge sort?
+
+BUILD
+win: build.bat Debug/RelWithDebInfo
+lnx: build.sh Debug/RelWIthDebInfo

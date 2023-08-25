@@ -2,17 +2,30 @@ cmake_minimum_required(VERSION 3.1)
 project(octopus VERSION 3.11.0)
 add_executable(test_oct test/test.cc)
 set(CMAKE_VERBOSE_MAKEFILE ON)
-
 include(ExternalProject)
 
-message("CMAKE_BUILD_TYPE" ${CMAKE_BUILD_TYPE})
-message("CMAKE_CONFIGURATION_TYPES" ${CMAKE_CONFIGURATION_TYPES})
+set(VALID_BUILD_TYPES RelWithDebInfo Debug)
+
+if (CMAKE_BUILD_TYPE)
+  list(FIND VALID_BUILD_TYPES CMAKE_BUILD_TYPE found_build_type)
+  if (NOT ${found_build_type})
+    message(FATAL_ERROR "Invalid build type!")
+  endif()
+else()
+  message(FATAL_ERROR "CMAKE_BUILD_TYPE not set!")
+endif()
 
 if(WIN32)
-  set(TBB_BINARY "tbb12.dll")
+  if (${CMAKE_BUILD_TYPE} STREQUAL "RelWithDebInfo")
+    set(TBB_BINARY "tbb12.dll")
+  else()
+    set(TBB_BINARY "tbb12_debug.dll")
+  endif()
 else()
   set(TBB_BINARY "libtbb12.so")
 endif()
+
+string(TOLOWER ${CMAKE_BUILD_TYPE} build_type_lower)
 
 ExternalProject_Add(intel_tbb
                     GIT_REPOSITORY https://github.com/oneapi-src/oneTBB.git
@@ -20,13 +33,17 @@ ExternalProject_Add(intel_tbb
                     SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/tbb-src
                     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/tbb-build
                     CMAKE_ARGS -DTBB_TEST=OFF -DTBBMALLOC_BUILD=OFF -DTBBMALLOC_PROXY_BUILD=OFF -DTBB_TEST=OFF -DTBB_OUTPUT_DIR_BASE=tbb
-                    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/tbb-build/tbb_relwithdebinfo/${TBB_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/RelWithDebInfo/${TBB_BINARY})
+                    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/tbb-build/tbb_${build_type_lower}/${TBB_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/${TBB_BINARY})
 
 set(TBB_INC ${CMAKE_CURRENT_BINARY_DIR}/tbb-src/include)
-set(TBB_BIN ${CMAKE_CURRENT_BINARY_DIR}/tbb-build/tbb_relwithdebinfo)
+set(TBB_BIN ${CMAKE_CURRENT_BINARY_DIR}/tbb-build/tbb_${build_type_lower})
 
 if(WIN32)
-  set(TBB "tbb12")
+  if (${CMAKE_BUILD_TYPE} STREQUAL "RelWithDebInfo")
+    set(TBB "tbb12")
+  else()
+    set(TBB "tbb12_debug")
+  endif()
 else()
   set(TBB "tbb")
 endif()
