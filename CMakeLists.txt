@@ -22,7 +22,11 @@ if(WIN32)
     set(TBB_BINARY "tbb12_debug.dll")
   endif()
 else()
-  set(TBB_BINARY "libtbb12.so")
+  if (${CMAKE_BUILD_TYPE} STREQUAL "RelWithDebInfo")
+    set(TBB_BINARY "libtbb.so")
+  else()
+    set(TBB_BINARY "libtbb_debug.so")
+  endif()
 endif()
 
 string(TOLOWER ${CMAKE_BUILD_TYPE} build_type_lower)
@@ -32,7 +36,7 @@ ExternalProject_Add(intel_tbb
                     GIT_TAG v2021.8.0
                     SOURCE_DIR ${CMAKE_CURRENT_BINARY_DIR}/tbb-src
                     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/tbb-build
-                    CMAKE_ARGS -DTBB_TEST=OFF -DTBBMALLOC_BUILD=OFF -DTBBMALLOC_PROXY_BUILD=OFF -DTBB_TEST=OFF -DTBB_OUTPUT_DIR_BASE=tbb
+		    CMAKE_ARGS -DTBB_TEST=OFF -DTBBMALLOC_BUILD=OFF -DTBBMALLOC_PROXY_BUILD=OFF -DTBB_TEST=OFF -DTBB_OUTPUT_DIR_BASE=tbb -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
                     INSTALL_COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/tbb-build/tbb_${build_type_lower}/${TBB_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/${TBB_BINARY})
 
 set(TBB_INC ${CMAKE_CURRENT_BINARY_DIR}/tbb-src/include)
@@ -45,7 +49,11 @@ if(WIN32)
     set(TBB "tbb12_debug")
   endif()
 else()
-  set(TBB "tbb")
+  if (${CMAKE_BUILD_TYPE} STREQUAL "RelWithDebInfo")
+    set(TBB "tbb")
+  else()
+    set(TBB "tbb_debug")
+  endif()
 endif()
 
 find_package(OpenMP)
