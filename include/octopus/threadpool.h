@@ -25,6 +25,8 @@
         throw std::runtime_error(msg); \
     }
 
+#define PAD int64_t __pad = 0
+
 namespace octopus {
 
     using Iter = std::atomic_int32_t;
@@ -127,6 +129,7 @@ namespace octopus {
         const short loading = 1;
         const short unloading = 2;
         const short ready = 3;
+        PAD;
     };
 
     template<typename T, size_t CAPACITY>
@@ -210,6 +213,22 @@ namespace octopus {
         virtual std::ptrdiff_t Partition(std::ptrdiff_t, std::ptrdiff_t) const = 0;
     };
 
+	class BinaryPartitioner : public Partitioner {
+	public:
+		BinaryPartitioner(std::ptrdiff_t min_chunk) : __min_chunk(min_chunk) {
+		}
+		std::ptrdiff_t Partition(std::ptrdiff_t begin, std::ptrdiff_t end) const override {
+			auto total = end - begin;
+			if (total <= 0) {
+				return begin;
+			}
+			auto half = total >> 1;
+			return half < __min_chunk ? end : begin + half;
+		}
+	private:
+		std::ptrdiff_t __min_chunk;
+	};
+
     class StaticPartitioner : public Partitioner {
     public:
         StaticPartitioner(std::ptrdiff_t chuck_size) :
@@ -279,9 +298,10 @@ namespace octopus {
         Partitioner* __partitioner = {};
         std::ptrdiff_t __begin = {};
         std::ptrdiff_t __end = {};
+        PAD;
     };
 
-    using TaskQueue = Queue<Task, 64>;
+    using TaskQueue = Queue<Task, 128>;
 
     // each main thread owns a task pool
     class alignas(OCT_CACHE_LINE_SIZE) TaskPool {

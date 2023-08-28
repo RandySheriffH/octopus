@@ -262,9 +262,11 @@ void TestSubThread() {
         }
     };
 
-    octopus::AffinityPartitioner partitioner(THREAD, std::max(SCALE / (10 * THREAD), (size_t)1));
+    //octopus::AffinityPartitioner partitioner(THREAD, std::max(SCALE / (10 * THREAD), (size_t)1));
     //octopus::StaticPartitioner partitioner(std::max(static_cast<std::ptrdiff_t>(SCALE)/(10*THREAD), 1ULL));
     //octopus::AffinityPartitioner partitioner(2, SCALE/(THREAD*10));
+    //octopus::BinaryPartitioner partitioner(1000);
+    octopus::BinaryPartitioner partitioner(10000);
 
     CPUUsage cpu_usage;
     auto tm_start = std::chrono::steady_clock::now();
@@ -500,12 +502,12 @@ int main() {
     //BREAK;
     //TestMainThread<4, 10, 2000>();
     //BREAK;
-    TestSubThread<8, 10000000, 100>();
+    TestSubThread<10, 10000000, 100>();
     BREAK;
     //TestSubThreadEmdded<4, 10000, 100>();
     //BREAK;
     TestTBB<10, 10000000, 100>();
-    BREAK;
-    TestOMP<10, 10000000, 100>();
+    //BREAK;
+    //TestOMP<10, 10000000, 100>();
     std::cout << "see ya, Mr Octopus!" << std::endl;
 }
