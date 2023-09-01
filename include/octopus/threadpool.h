@@ -546,7 +546,7 @@ namespace octopus {
 
     void Task::Run() {
         TaskPool** task_pool = ThreadPool::GetTaskPool();
-        auto end = __end;
+        //auto end = __end;
         if (__fn && __partitioner && *task_pool) {
             auto thread_index = ThreadPool::GetThreadIndex();
             std::ptrdiff_t mid = __end;
