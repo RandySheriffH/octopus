@@ -552,17 +552,20 @@ namespace octopus {
             std::ptrdiff_t mid = __end;
             while ((mid = __partitioner->Partition(__begin, __end)) < __end) {
                 Task sub_task(__fn, __partitioner, mid, __end);
-                if (!(*task_pool)->PushTailAt(std::move(sub_task), thread_index)) {
+                if ((*task_pool)->PushTailAt(std::move(sub_task), thread_index)) {
+                    (*ThreadPool::GetThreadPool())->NotifyAll();
+                    __end = mid;
+                }
+                else {
                     break;
                 }
-                __end = mid;
             }
         }
         if (__fn) {
             assert(__begin <= __end);
-            if (__end < end) {
-                (*ThreadPool::GetThreadPool())->NotifyAll();
-            }
+            //if (__end < end) {
+            //    (*ThreadPool::GetThreadPool())->NotifyAll();
+            //}
             (*__fn)(__begin, __end);
         }
     }
