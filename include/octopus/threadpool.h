@@ -454,8 +454,8 @@ namespace octopus {
             GetThreadIndex() = index;
             *GetThreadPool() = this;
 
-            bool done_task = {};
-            bool has_task = {};
+            //bool done_task = {};
+            //bool has_task = {};
             TaskPool* task_pool = {};
             ThreadData& thread_data = __thread_datas[index - 1];
             thread_data.tid = std::this_thread::get_id();
@@ -498,7 +498,7 @@ namespace octopus {
             const size_t num_spin = 10;
             while (!thread_data.exit) {
                 *GetTaskPool() = {};
-                TaskPool* task_pool = {};
+                task_pool = {};
                 for (size_t i = 0; i < num_spin; ++i) {
                     task_pool = __task_pools.Head();
                     if (task_pool) {
