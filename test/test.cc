@@ -498,15 +498,16 @@ void TestOMP() {
 
 int main() {
     std::cout << "hi, Mr Octopus!" << std::endl;
+    constexpr size_t num_threads = 8; // std::thread::hardware_concurrency();
     //TestQueue<64, 1000>();
     //BREAK;
     //TestMainThread<4, 10, 2000>();
     //BREAK;
-    TestSubThread<10, 10000000, 100>();
+    TestSubThread<num_threads, 10000000, 100>();
     BREAK;
     //TestSubThreadEmdded<4, 10000, 100>();
     //BREAK;
-    TestTBB<10, 10000000, 100>();
+    TestTBB<num_threads, 10000000, 100>();
     //BREAK;
     //TestOMP<10, 10000000, 100>();
     std::cout << "see ya, Mr Octopus!" << std::endl;

@@ -461,36 +461,63 @@ namespace octopus {
             thread_data.tid = std::this_thread::get_id();
 
             // const size_t num_spin = (index & 1) ? 2 : 1;
-            const size_t num_spin = 5;
+            //const size_t num_spin = 5;
+            //while (!thread_data.exit) {
+            //    size_t counter_idle = 0;
+            //    for (size_t i = 0; i < num_spin; ++i) {
+            //        done_task = false;
+            //        task_pool = __task_pools.Head();
+            //        if (task_pool) {
+            //            *GetTaskPool() = task_pool;
+            //            do {
+            //                has_task = false;
+            //                for (size_t j = 0; j < __num_thread; ++j) {
+            //                    auto task = task_pool->PopHeadAt(j, false);
+            //                    if (task) {
+            //                        task.Run();
+            //                        while (task = task_pool->PopTailAt(index, true)) {
+            //                            task.Run();
+            //                        }
+            //                        done_task = has_task = true;
+            //                    }
+            //                }
+            //            } while (has_task);
+            //        }
+            //        if (!done_task) {
+            //            ++counter_idle;
+            //            if (i + 1 < num_spin) {
+            //                std::this_thread::yield();
+            //            }
+            //        }
+            //    }
+            //    if (counter_idle == num_spin) {
+            //        WaitForTask();
+            //    }
+            //}
+
+            const size_t num_spin = 10;
             while (!thread_data.exit) {
-                size_t counter_idle = 0;
+                *GetTaskPool() = {};
+                TaskPool* task_pool = {};
                 for (size_t i = 0; i < num_spin; ++i) {
-                    done_task = false;
                     task_pool = __task_pools.Head();
                     if (task_pool) {
-                        *GetTaskPool() = task_pool;
-                        do {
-                            has_task = false;
-                            for (size_t j = 0; j < __num_thread; ++j) {
-                                auto task = task_pool->PopHeadAt(j, false);
-                                if (task) {
-                                    task.Run();
-                                    while (task = task_pool->PopTailAt(index, true)) {
-                                        task.Run();
-                                    }
-                                    done_task = has_task = true;
-                                }
-                            }
-                        } while (has_task);
+                        break;
                     }
-                    if (!done_task) {
-                        ++counter_idle;
-                        if (i + 1 < num_spin) {
-                            std::this_thread::yield();
+                }
+                if (task_pool) {
+                    *GetTaskPool() = task_pool;
+                    for (size_t j = 0; j < __num_thread; ++j) {
+                        auto task = task_pool->PopHeadAt(j, false);
+                        if (task) {
+                            task.Run();
+                            while (task = task_pool->PopTailAt(index, true)) {
+                                task.Run();
+                            }
                         }
                     }
                 }
-                if (counter_idle == num_spin) {
+                else {
                     WaitForTask();
                 }
             }
