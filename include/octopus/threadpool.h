@@ -213,21 +213,21 @@ namespace octopus {
         virtual std::ptrdiff_t Partition(std::ptrdiff_t, std::ptrdiff_t) const = 0;
     };
 
-	class BinaryPartitioner : public Partitioner {
-	public:
-		BinaryPartitioner(std::ptrdiff_t min_chunk) : __min_chunk(min_chunk) {
-		}
-		std::ptrdiff_t Partition(std::ptrdiff_t begin, std::ptrdiff_t end) const override {
-			auto total = end - begin;
-			if (total <= 0) {
-				return begin;
-			}
-			auto half = total >> 1;
-			return half < __min_chunk ? end : begin + half;
-		}
-	private:
-		std::ptrdiff_t __min_chunk;
-	};
+    class BinaryPartitioner : public Partitioner {
+    public:
+        BinaryPartitioner(std::ptrdiff_t min_chunk) : __min_chunk(min_chunk) {
+        }
+        std::ptrdiff_t Partition(std::ptrdiff_t begin, std::ptrdiff_t end) const override {
+            auto total = end - begin;
+            if (total <= 0) {
+                return begin;
+            }
+            auto half = total >> 1;
+            return half < __min_chunk ? end : begin + half;
+        }
+    private:
+        std::ptrdiff_t __min_chunk;
+    };
 
     class StaticPartitioner : public Partitioner {
     public:
@@ -372,31 +372,29 @@ namespace octopus {
                 task.Run();
             }
             else {
-                *GetThreadPool() = this;
-                LinkedList<TaskPool*, 32>::Node node(std::move(*GetTaskPool()));
-                __task_pools.Prepend(&node);
-
                 // if it's main thread
+                *GetThreadPool() = this;
+                LinkedList<TaskPool*, 32>::Node list_node(std::move(*GetTaskPool()));
+                __task_pools.Prepend(&list_node);
+
                 alignas(OCT_CACHE_LINE_SIZE) std::atomic<std::ptrdiff_t> counter{ begin };
                 Fn wrapper_fn = [&counter, fn](std::ptrdiff_t b, std::ptrdiff_t e) {
                     (*fn)(b, e);
                     counter.fetch_add(e - b, OCT_ATOM_RLX);
-                };
+                    };
 
-                //__task_pools.NotifyAll();
                 Task task(&wrapper_fn, partitioner, begin, end);
                 task.Run();
 
                 TaskPool* task_pool = *GetTaskPool();
+                assert(task_pool);
                 while (task = task_pool->PopTailAt(0, true)) {
                     task.Run();
                 }
 
-                bool done_task = false;
-                assert(task_pool);
-
+                bool done_tasks = false;
                 while (counter.load(OCT_ATOM_RLX) < end) {
-                    done_task = false;
+                    done_tasks = false;
                     for (size_t i = 1; i < __num_thread; ++i) {
                         task = task_pool->PopHeadAt(i, false);
                         if (task) {
@@ -404,16 +402,16 @@ namespace octopus {
                             while (task = task_pool->PopTailAt(0, true)) {
                                 task.Run();
                             }
-                            done_task = true;
+                            done_tasks = true;
                         }
                     }
-                    if (!done_task) {
-                        _mm_pause();
+                    if (!done_tasks) {
+                        _mm_pause(); // see if yield better the perf
                     }
                 }
 
                 assert(counter.load(OCT_ATOM_RLX) == end);
-                __task_pools.Remove(&node);
+                __task_pools.Remove(&list_node);
             }
         }
 
@@ -454,48 +452,11 @@ namespace octopus {
             GetThreadIndex() = index;
             *GetThreadPool() = this;
 
-            //bool done_task = {};
-            //bool has_task = {};
             TaskPool* task_pool = {};
             ThreadData& thread_data = __thread_datas[index - 1];
             thread_data.tid = std::this_thread::get_id();
 
-            // const size_t num_spin = (index & 1) ? 2 : 1;
-            //const size_t num_spin = 5;
-            //while (!thread_data.exit) {
-            //    size_t counter_idle = 0;
-            //    for (size_t i = 0; i < num_spin; ++i) {
-            //        done_task = false;
-            //        task_pool = __task_pools.Head();
-            //        if (task_pool) {
-            //            *GetTaskPool() = task_pool;
-            //            do {
-            //                has_task = false;
-            //                for (size_t j = 0; j < __num_thread; ++j) {
-            //                    auto task = task_pool->PopHeadAt(j, false);
-            //                    if (task) {
-            //                        task.Run();
-            //                        while (task = task_pool->PopTailAt(index, true)) {
-            //                            task.Run();
-            //                        }
-            //                        done_task = has_task = true;
-            //                    }
-            //                }
-            //            } while (has_task);
-            //        }
-            //        if (!done_task) {
-            //            ++counter_idle;
-            //            if (i + 1 < num_spin) {
-            //                std::this_thread::yield();
-            //            }
-            //        }
-            //    }
-            //    if (counter_idle == num_spin) {
-            //        WaitForTask();
-            //    }
-            //}
-
-            const size_t num_spin = 10;
+            constexpr size_t num_spin = 10;
             while (!thread_data.exit) {
                 *GetTaskPool() = {};
                 task_pool = {};
@@ -529,7 +490,7 @@ namespace octopus {
 
         void WaitForTask() {
             std::unique_lock<std::mutex> lock(__mtx);
-            __cv.wait_for(lock, std::chrono::milliseconds{300});
+            __cv.wait_for(lock, std::chrono::milliseconds{ 300 });
         }
 
         const size_t __num_thread; // including main thread
@@ -546,7 +507,6 @@ namespace octopus {
 
     void Task::Run() {
         TaskPool** task_pool = ThreadPool::GetTaskPool();
-        //auto end = __end;
         if (__fn && __partitioner && *task_pool) {
             auto thread_index = ThreadPool::GetThreadIndex();
             std::ptrdiff_t mid = __end;
@@ -563,9 +523,6 @@ namespace octopus {
         }
         if (__fn) {
             assert(__begin <= __end);
-            //if (__end < end) {
-            //    (*ThreadPool::GetThreadPool())->NotifyAll();
-            //}
             (*__fn)(__begin, __end);
         }
     }
