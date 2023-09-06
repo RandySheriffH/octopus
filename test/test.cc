@@ -5,6 +5,7 @@
 #include <thread>
 #include <bitset>
 #include <cassert>
+#include <cmath>
 #include <map>
 
 #ifdef _WIN32
@@ -195,35 +196,37 @@ void TestQueue() {
 
 template<size_t CAPACITY, size_t SCALE>
 void TestTpIntegrity() {
+    {
+        octopus::ThreadPool tp(std::thread::hardware_concurrency());
 
-    octopus::ThreadPool tp(std::thread::hardware_concurrency());
-
-    std::atomic<size_t> total = 0;
-    std::thread thread = std::thread([&]() {
-        octopus::Fn fn = [&](std::ptrdiff_t begin, std::ptrdiff_t end) {
-            total.fetch_add(end - begin);
-            };
-        tp.ParallFor(&fn, SCALE);
-        });
-    thread.join();
-    assert(total == SCALE);
-
-    std::vector<std::atomic<size_t>> totals(CAPACITY);
-    std::vector<std::thread> threads;
-    for (size_t i = 0; i < CAPACITY; ++i) {
-        totals[i] = 0;
-        threads.emplace_back(std::thread([&, i]() {
-            octopus::Fn fn = [&, i](std::ptrdiff_t begin, std::ptrdiff_t end) {
-                totals[i].fetch_add(end - begin);
+        std::atomic<size_t> total = 0;
+        std::thread thread = std::thread([&]() {
+            octopus::Fn fn = [&](std::ptrdiff_t begin, std::ptrdiff_t end) {
+                total.fetch_add(end - begin);
                 };
             tp.ParallFor(&fn, SCALE);
-            }));
-    }
-    for (auto& thread : threads) {
+            });
         thread.join();
-    }
-    for (size_t i = 0; i < CAPACITY; ++i) {
-        OCT_ENFORCE(totals[i].load() == SCALE, "");
+        assert(total == SCALE);
+
+        std::vector<std::atomic<size_t>> totals(CAPACITY);
+        std::vector<std::thread> threads;
+        threads.reserve(CAPACITY);
+        for (size_t i = 0; i < CAPACITY; ++i) {
+            totals[i] = 0;
+            threads.emplace_back(std::thread([&, i]() {
+                octopus::Fn fn = [&, i](std::ptrdiff_t begin, std::ptrdiff_t end) {
+                    totals[i].fetch_add(end - begin);
+                    };
+                tp.ParallFor(&fn, SCALE);
+                }));
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+        for (size_t i = 0; i < CAPACITY; ++i) {
+            OCT_ENFORCE(totals[i].load() == SCALE, "");
+        }
     }
 
     std::cout << "TestTpIntegrity done." << std::endl;
@@ -297,16 +300,21 @@ struct Tp {
 };
 
 struct TpOct : public Tp {
-    TpOct() :tp_(std::thread::hardware_concurrency()) {}
+    TpOct() : hw_(std::thread::hardware_concurrency()), tp_(hw_) {}
     void ParallelFor(std::ptrdiff_t total, const SimpleFn& simple_fn) override {
         octopus::Fn fn = [&](std::ptrdiff_t begin, std::ptrdiff_t end) {
             for (auto ith = begin; ith < end; ++ith) {
                 simple_fn(ith);
             }
             };
-        octopus::BinaryPartitioner partitioner(20000);
+        //octopus::BinaryPartitioner partitioner(20000);
+        octopus::BinaryPartitioner partitioner(1);
+        //octopus::BinaryPartitioner partitioner(10);
+        //auto granularity = std::floor(std::pow(total, 1.0 / hw_));
+        //octopus::BinaryPartitioner partitioner(static_cast<std::ptrdiff_t>(granularity));
         tp_.ParallFor(&fn, total, &partitioner);
     }
+    unsigned int hw_;
     octopus::ThreadPool tp_;
 };
 
@@ -433,14 +441,14 @@ void TestTpPerf(TpType tp_type, const std::string& tp_name) {
 int main() {
     std::cout << "hi, Mr Octopus!" << std::endl;
     try {
-        TestQueue<64, 1000>();
-        BREAK;
-        TestTpIntegrity<10, 2000>();
-        BREAK;
-        TestSubThreadEmdded<10000, 100>();
-        BREAK;
-        TestTpPerf<10000000, 100>(omp_t, "OMP");
-        BREAK;
+        //TestQueue<64, 1000>();
+        //BREAK;
+        //TestTpIntegrity<10, 2000>();
+        //BREAK;
+        //TestSubThreadEmdded<10000, 100>();
+        //BREAK;
+        //TestTpPerf<10000000, 100>(omp_t, "OMP");
+        //BREAK;
         TestTpPerf<10000000, 100>(tbb_t, "TBB");
         BREAK;
         TestTpPerf<10000000, 100>(oct_t, "OCT");

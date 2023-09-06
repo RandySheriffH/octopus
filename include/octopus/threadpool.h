@@ -124,7 +124,7 @@ namespace octopus {
     private:
         alignas(OCT_CACHE_LINE_SIZE) Iter __head{};
         alignas(OCT_CACHE_LINE_SIZE) Iter __tail {};
-        Slot __slots[CAPACITY];
+        alignas(OCT_CACHE_LINE_SIZE) Slot __slots[CAPACITY];
         const short empty = 0;
         const short loading = 1;
         const short unloading = 2;
@@ -218,11 +218,7 @@ namespace octopus {
         BinaryPartitioner(std::ptrdiff_t min_chunk) : __min_chunk(min_chunk) {
         }
         std::ptrdiff_t Partition(std::ptrdiff_t begin, std::ptrdiff_t end) const override {
-            auto total = end - begin;
-            if (total <= 0) {
-                return begin;
-            }
-            auto half = total >> 1;
+            auto half = (end - begin) >> 1;
             return half < __min_chunk ? end : begin + half;
         }
     private:
@@ -301,7 +297,8 @@ namespace octopus {
         PAD;
     };
 
-    using TaskQueue = Queue<Task, 128>;
+    // using TaskQueue = Queue<Task, 128>;
+    using TaskQueue = Queue<Task, 4>;
 
     // each main thread owns a task pool
     class alignas(OCT_CACHE_LINE_SIZE) TaskPool {
@@ -343,6 +340,7 @@ namespace octopus {
         //num_thread include main thread, so only "num_thread - 1" threads will be created
         ThreadPool(size_t num_thread) : __num_thread(num_thread) {
             __thread_datas.resize(__num_thread - 1);
+            __threads.reserve(__num_thread - 1);
             for (size_t index = 1; index < __num_thread; ++index) {
                 __threads.emplace_back(&ThreadPool::ThreadEntry, this, index);
             }
