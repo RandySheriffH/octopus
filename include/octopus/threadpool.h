@@ -478,7 +478,7 @@ namespace octopus {
                     }
                 }
                 else {
-                    WaitForTask();
+                    // WaitForTask();
                 }
             }
         }
