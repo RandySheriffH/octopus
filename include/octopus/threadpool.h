@@ -455,7 +455,7 @@ namespace octopus {
             ThreadData& thread_data = __thread_datas[index - 1];
             thread_data.tid = std::this_thread::get_id();
 
-            constexpr size_t num_spin = 10;
+            constexpr size_t num_spin = std::numeric_limits<size_t>::max();
             while (!thread_data.exit) {
                 *GetTaskPool() = {};
                 task_pool = {};
@@ -478,7 +478,8 @@ namespace octopus {
                     }
                 }
                 else {
-                    WaitForTask();
+                    std::this_thread::yield();
+                    //WaitForTask();
                 }
             }
         }
