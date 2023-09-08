@@ -238,7 +238,8 @@ namespace octopus {
         const std::ptrdiff_t __chuck_size;
     };
 
-    StaticPartitioner default_partitioner(1);
+    // StaticPartitioner default_partitioner(1);
+    BinaryPartitioner default_partitioner(1);
 
     class AffinityPartitioner : public Partitioner {
     public:
