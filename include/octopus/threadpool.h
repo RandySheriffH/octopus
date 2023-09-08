@@ -455,11 +455,11 @@ namespace octopus {
             ThreadData& thread_data = __thread_datas[index - 1];
             thread_data.tid = std::this_thread::get_id();
 
-            constexpr size_t num_spin = 10;
+            constexpr size_t num_spin = 50;
             while (!thread_data.exit) {
                 *GetTaskPool() = {};
                 task_pool = {};
-                for (size_t i = 0; i < num_spin; ++i) {
+                for (size_t i = 0; i < num_spin && !thread_data.exit; ++i) {
                     task_pool = __task_pools.Head();
                     if (task_pool) {
                         break;
@@ -467,7 +467,7 @@ namespace octopus {
                 }
                 if (task_pool) {
                     *GetTaskPool() = task_pool;
-                    for (size_t j = 0; j < __num_thread; ++j) {
+                    for (size_t j = 0; j < __num_thread && !thread_data.exit; ++j) {
                         auto task = task_pool->PopHeadAt(j, false);
                         if (task) {
                             task.Run();
