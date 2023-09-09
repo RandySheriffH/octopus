@@ -299,7 +299,7 @@ namespace octopus {
     };
 
     // using TaskQueue = Queue<Task, 128>;
-    using TaskQueue = Queue<Task, 8>;
+    using TaskQueue = Queue<Task, 2>;
 
     // each main thread owns a task pool
     class alignas(OCT_CACHE_LINE_SIZE) TaskPool {
