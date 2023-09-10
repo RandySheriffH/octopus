@@ -459,7 +459,7 @@ namespace octopus {
             while (!thread_data.exit) {
                 *GetTaskPool() = {};
                 task_pool = {};
-                for (size_t i = 0; i < num_spin; ++i) {
+                for (size_t i = 0; i < num_spin && !thread_data.exit; ++i) {
                     task_pool = __task_pools.Head();
                     if (task_pool) {
                         break;
@@ -467,13 +467,16 @@ namespace octopus {
                 }
                 if (task_pool) {
                     *GetTaskPool() = task_pool;
-                    for (size_t j = 0; j < __num_thread; ++j) {
+                    for (size_t j = 0; j < __num_thread && !thread_data.exit;) {
                         auto task = task_pool->PopHeadAt(j, false);
                         if (task) {
                             task.Run();
                             while (task = task_pool->PopTailAt(index, true)) {
                                 task.Run();
                             }
+                        }
+                        else {
+                            ++j;
                         }
                     }
                 }
