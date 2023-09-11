@@ -312,7 +312,7 @@ struct TpOct : public Tp {
         //octopus::BinaryPartitioner partitioner(10);
         //auto granularity = std::floor(std::pow(total, 1.0 / hw_));
         //octopus::BinaryPartitioner partitioner(static_cast<std::ptrdiff_t>(granularity));
-        tp_.ParallFor(&fn, total, &partitioner);
+        tp_.ParallFor(fn, total, &partitioner);
     }
     unsigned int hw_;
     octopus::ThreadPool tp_;
