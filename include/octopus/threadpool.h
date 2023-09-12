@@ -275,7 +275,7 @@ namespace octopus {
     class alignas(OCT_CACHE_LINE_SIZE) Task {
     public:
         Task() = default;
-        Task(Fn* fn,
+        Task(const Fn& fn,
             Partitioner* partitioner,
             std::ptrdiff_t begin,
             std::ptrdiff_t end) :
@@ -284,14 +284,14 @@ namespace octopus {
         Task(const Task& task) = default;
         Task(Task&& task) = default;
 
-        operator bool() const { return __fn; }
+        operator bool() const { return __fn.operator bool(); }
         Task& operator = (const Task& task) = default;
         Task& operator = (Task&& task) = default;
 
         void Run();
 
     private:
-        Fn* __fn = {};
+        Fn __fn;
         Partitioner* __partitioner = {};
         std::ptrdiff_t __begin = {};
         std::ptrdiff_t __end = {};
@@ -356,11 +356,11 @@ namespace octopus {
             __thread_datas.clear();
         }
 
-        void ParallFor(Fn* fn, std::ptrdiff_t total, Partitioner* partitioner = &default_partitioner) {
+        void ParallFor(const Fn& fn, std::ptrdiff_t total, Partitioner* partitioner = &default_partitioner) {
             ParallFor(fn, 0, total, partitioner);
         }
 
-        void ParallFor(Fn* fn, std::ptrdiff_t begin, std::ptrdiff_t end, Partitioner* partitioner = &default_partitioner) {
+        void ParallFor(const Fn& fn, std::ptrdiff_t begin, std::ptrdiff_t end, Partitioner* partitioner = &default_partitioner) {
             if (!fn || begin >= end) {
                 return;
             }
@@ -378,11 +378,11 @@ namespace octopus {
 
                 alignas(OCT_CACHE_LINE_SIZE) std::atomic<std::ptrdiff_t> counter{ begin };
                 Fn wrapper_fn = [&counter, fn](std::ptrdiff_t b, std::ptrdiff_t e) {
-                    (*fn)(b, e);
+                    fn(b, e);
                     counter.fetch_add(e - b, OCT_ATOM_RLX);
                     };
 
-                Task task(&wrapper_fn, partitioner, begin, end);
+                Task task(wrapper_fn, partitioner, begin, end);
                 task.Run();
 
                 TaskPool* task_pool = *GetTaskPool();
@@ -522,7 +522,7 @@ namespace octopus {
         }
         if (__fn) {
             assert(__begin <= __end);
-            (*__fn)(__begin, __end);
+            __fn(__begin, __end);
         }
     }
 }

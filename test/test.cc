@@ -204,7 +204,7 @@ void TestTpIntegrity() {
             octopus::Fn fn = [&](std::ptrdiff_t begin, std::ptrdiff_t end) {
                 total.fetch_add(end - begin);
                 };
-            tp.ParallFor(&fn, SCALE);
+            tp.ParallFor(fn, SCALE);
             });
         thread.join();
         assert(total == SCALE);
@@ -269,7 +269,7 @@ void TestSubThreadEmdded() {
         };
 
     auto tm_start = std::chrono::steady_clock::now();
-    tp.ParallFor(&fn, SCALE);
+    tp.ParallFor(fn, SCALE);
     auto tm_stop = std::chrono::steady_clock::now();
 
     std::unordered_map<std::thread::id, size_t> counter;
@@ -312,7 +312,7 @@ struct TpOct : public Tp {
         //octopus::BinaryPartitioner partitioner(10);
         //auto granularity = std::floor(std::pow(total, 1.0 / hw_));
         //octopus::BinaryPartitioner partitioner(static_cast<std::ptrdiff_t>(granularity));
-        tp_.ParallFor(&fn, total, &partitioner);
+        tp_.ParallFor(fn, total, &partitioner);
     }
     unsigned int hw_;
     octopus::ThreadPool tp_;
@@ -441,14 +441,14 @@ void TestTpPerf(TpType tp_type, const std::string& tp_name) {
 int main() {
     std::cout << "hi, Mr Octopus!" << std::endl;
     try {
-        //TestQueue<64, 1000>();
-        //BREAK;
-        //TestTpIntegrity<10, 2000>();
-        //BREAK;
-        //TestSubThreadEmdded<10000, 100>();
-        //BREAK;
-        //TestTpPerf<10000000, 100>(omp_t, "OMP");
-        //BREAK;
+        TestQueue<64, 1000>();
+        BREAK;
+        TestTpIntegrity<10, 2000>();
+        BREAK;
+        TestSubThreadEmdded<10000, 100>();
+        BREAK;
+        TestTpPerf<10000000, 100>(omp_t, "OMP");
+        BREAK;
         TestTpPerf<10000000, 100>(tbb_t, "TBB");
         BREAK;
         TestTpPerf<10000000, 100>(oct_t, "OCT");
