@@ -137,6 +137,7 @@ namespace octopus {
     public:
         struct alignas(OCT_CACHE_LINE_SIZE) Node {
             Node(T&& t) : __t(t) {}
+            Node(const T& t) : __t(t) {}
             T __t{};
             std::atomic_bool __locked{ false };
             Node* __prev{};
@@ -238,8 +239,7 @@ namespace octopus {
         const std::ptrdiff_t __chuck_size;
     };
 
-    // StaticPartitioner default_partitioner(1);
-    BinaryPartitioner default_partitioner(1);
+    BinaryPartitioner s_binary_partitioner(1);
 
     class AffinityPartitioner : public Partitioner {
     public:
@@ -272,31 +272,29 @@ namespace octopus {
         const std::ptrdiff_t __min_chuck_size;
     };
 
-    class alignas(OCT_CACHE_LINE_SIZE) Task {
-    public:
-        Task() = default;
-        Task(const Fn& fn,
-            Partitioner* partitioner,
-            std::ptrdiff_t begin,
-            std::ptrdiff_t end) :
-            __fn(fn), __partitioner(partitioner), __begin(begin), __end(end) {}
+	class alignas(OCT_CACHE_LINE_SIZE) Task {
+	public:
+		Task() = default;
+		Task(const Fn& fn,
+			std::ptrdiff_t begin,
+			std::ptrdiff_t end) :
+			__fn(fn), __begin(begin), __end(end) {}
 
-        Task(const Task& task) = default;
-        Task(Task&& task) = default;
+		Task(const Task& task) = default;
+		Task(Task&& task) = default;
 
-        operator bool() const { return __fn.operator bool(); }
-        Task& operator = (const Task& task) = default;
-        Task& operator = (Task&& task) = default;
+		operator bool() const { return __fn.operator bool(); }
+		Task& operator = (const Task& task) = default;
+		Task& operator = (Task&& task) = default;
 
-        void Run();
+		void Run();
 
-    private:
-        Fn __fn;
-        Partitioner* __partitioner = {};
-        std::ptrdiff_t __begin = {};
-        std::ptrdiff_t __end = {};
-        PAD;
-    };
+	private:
+		Fn __fn;
+		std::ptrdiff_t __begin = {};
+		std::ptrdiff_t __end = {};
+		PAD;
+	};
 
     // using TaskQueue = Queue<Task, 128>;
     using TaskQueue = Queue<Task, 4>;
@@ -323,6 +321,7 @@ namespace octopus {
         }
         bool exiting = false; // todo - hide this
         void Reset();
+        const Partitioner* partitioner = {};
     private:
         std::vector<TaskQueue> __task_queues;
     };
@@ -356,24 +355,27 @@ namespace octopus {
             __thread_datas.clear();
         }
 
-        void ParallFor(const Fn& fn, std::ptrdiff_t total, Partitioner* partitioner = &default_partitioner) {
+        void ParallFor(const Fn& fn, std::ptrdiff_t total, const Partitioner& partitioner = s_binary_partitioner) {
             ParallFor(fn, 0, total, partitioner);
         }
 
-        void ParallFor(const Fn& fn, std::ptrdiff_t begin, std::ptrdiff_t end, Partitioner* partitioner = &default_partitioner) {
+        void ParallFor(const Fn& fn, std::ptrdiff_t begin, std::ptrdiff_t end, const Partitioner& partitioner = s_binary_partitioner) {
             if (!fn || begin >= end) {
                 return;
             }
 
             if (GetThreadIndex()) {
                 // if it's sub-thread
-                Task task(fn, partitioner, begin, end);
+                Task task(fn, begin, end);
                 task.Run();
             }
             else {
                 // if it's main thread
                 *GetThreadPool() = this;
-                LinkedList<TaskPool*, 32>::Node list_node(std::move(*GetTaskPool()));
+                auto task_pool = *GetTaskPool();
+                task_pool->partitioner = &partitioner;
+
+                LinkedList<TaskPool*, 32>::Node list_node(task_pool);
                 __task_pools.Prepend(&list_node);
 
                 alignas(OCT_CACHE_LINE_SIZE) std::atomic<std::ptrdiff_t> counter{ begin };
@@ -382,10 +384,9 @@ namespace octopus {
                     counter.fetch_add(e - b, OCT_ATOM_RLX);
                     };
 
-                Task task(wrapper_fn, partitioner, begin, end);
+                Task task(wrapper_fn, begin, end);
                 task.Run();
 
-                TaskPool* task_pool = *GetTaskPool();
                 assert(task_pool);
                 while (task = task_pool->PopTailAt(0, true)) {
                     task.Run();
@@ -394,7 +395,7 @@ namespace octopus {
                 bool done_tasks = false;
                 while (counter.load(OCT_ATOM_RLX) < end) {
                     done_tasks = false;
-                    for (size_t i = 1; i < __num_thread; ++i) {
+                    for (size_t i = 1; i < __num_thread;) {
                         task = task_pool->PopHeadAt(i, false);
                         if (task) {
                             task.Run();
@@ -402,6 +403,9 @@ namespace octopus {
                                 task.Run();
                             }
                             done_tasks = true;
+                        }
+                        else {
+                            ++i;
                         }
                     }
                     if (!done_tasks) {
@@ -467,13 +471,16 @@ namespace octopus {
                 }
                 if (task_pool) {
                     *GetTaskPool() = task_pool;
-                    for (size_t j = 0; j < __num_thread; ++j) {
+                    for (size_t j = 0; j < __num_thread;) {
                         auto task = task_pool->PopHeadAt(j, false);
                         if (task) {
                             task.Run();
                             while (task = task_pool->PopTailAt(index, true)) {
                                 task.Run();
                             }
+                        }
+                        else {
+                          ++j;
                         }
                     }
                 }
@@ -506,11 +513,13 @@ namespace octopus {
 
     void Task::Run() {
         TaskPool** task_pool = ThreadPool::GetTaskPool();
-        if (__fn && __partitioner && *task_pool) {
+        const Partitioner* partitioner = (*task_pool)->partitioner;
+        assert(partitioner);
+        if (__fn && *task_pool) {
             auto thread_index = ThreadPool::GetThreadIndex();
             std::ptrdiff_t mid = __end;
-            while ((mid = __partitioner->Partition(__begin, __end)) < __end) {
-                Task sub_task(__fn, __partitioner, mid, __end);
+            while ((mid = partitioner->Partition(__begin, __end)) < __end) {
+                Task sub_task(__fn, mid, __end);
                 if ((*task_pool)->PushTailAt(std::move(sub_task), thread_index)) {
                     (*ThreadPool::GetThreadPool())->NotifyAll();
                     __end = mid;
